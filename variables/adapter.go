@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 
+	mdaiv1 "github.com/decisiveai/mdai-operator/api/v1"
 	"github.com/go-logr/logr"
 	"github.com/valkey-io/valkey-go"
 	"gopkg.in/yaml.v3"
@@ -11,6 +12,16 @@ import (
 
 const (
 	VariableKeyPrefix = "variable/"
+
+	VariableUpdateSetAddElement    mdaiv1.VariableUpdateOperation = "mdai/add_element"
+	VariableUpdateSetRemoveElement mdaiv1.VariableUpdateOperation = "mdai/remove_element"
+	VariableUpdateSet              mdaiv1.VariableUpdateOperation = "mdai/set"
+	VariableUpdateDelete           mdaiv1.VariableUpdateOperation = "mdai/delete"
+	VariableUpdateIntIncrBy        mdaiv1.VariableUpdateOperation = "mdai/incr_by"
+	VariableUpdateIntDecrBy        mdaiv1.VariableUpdateOperation = "mdai/decr_by"
+	VariableUpdateSetMapEntry      mdaiv1.VariableUpdateOperation = "mdai/map_set_entry"
+	VariableUpdateRemoveMapEntry   mdaiv1.VariableUpdateOperation = "mdai/map_remove_entry"
+	VariableUpdateBulkSetKeyValue  mdaiv1.VariableUpdateOperation = "mdai/bulk_set_key_value"
 )
 
 var (
