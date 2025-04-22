@@ -178,7 +178,7 @@ func (c *AuditAdapter) DoVariableUpdateAndLog(ctx context.Context, variableUpdat
 		variableUpdateCommand,
 		auditLogCommand,
 	)
-	valkeyMultiErr := c.accumulateValkeyErrors(results)
+	valkeyMultiErr := c.accumulateValkeyErrors(results, valkeyKey)
 	return valkeyMultiErr
 }
 
@@ -269,13 +269,16 @@ func (c *AuditAdapter) getAuditLogTTLMinId() string {
 	return minid
 }
 
-func (c *AuditAdapter) accumulateValkeyErrors(results []valkey.ValkeyResult) error {
+func (c *AuditAdapter) accumulateValkeyErrors(results []valkey.ValkeyResult, key string) error {
 	var valkeyMultiErr error
 	for _, result := range results {
 		err := result.Error()
 		if err != nil {
-			valkeyMultiErr = multierr.Append(valkeyMultiErr, err)
-			c.logger.Error(err, "Valkey error")
+			wrapped := fmt.Errorf(
+				"operation failed on key %s: %w", key, err,
+			)
+			valkeyMultiErr = multierr.Append(valkeyMultiErr, wrapped)
+			c.logger.Error(wrapped, "Valkey error")
 		}
 	}
 	return valkeyMultiErr
