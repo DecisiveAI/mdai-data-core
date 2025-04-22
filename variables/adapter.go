@@ -59,7 +59,7 @@ func (r *ValkeyAdapter) GetSetAsStringSlice(ctx context.Context, key string) ([]
 func (r *ValkeyAdapter) GetString(ctx context.Context, key string) (string, bool, error) {
 	value, err := r.client.Do(ctx, r.client.B().Get().Key(key).Build()).ToString()
 	if err != nil {
-		if errors.Is(err, ErrValkeyNilMessage) || err.Error() == ErrValkeyNilMessage.Error() {
+		if errors.Is(err, ErrValkeyNilMessage) {
 			r.logger.Info("No value found in Valkey", "key", key)
 			return "", false, nil
 		}
@@ -111,6 +111,83 @@ func (r *ValkeyAdapter) SetMapEntry(key string, field string, value string) valk
 	return r.client.B().Hset().Key(key).FieldValue().FieldValue(field, value).Build()
 }
 
+func (r *ValkeyAdapter) BulkSetMap(key string, values map[string]string) valkey.Completed {
+	hsetFieldValue := r.client.B().Hset().Key(key).FieldValue()
+	for field, val := range values {
+		hsetFieldValue = hsetFieldValue.FieldValue(field, val)
+	}
+	return hsetFieldValue.Build()
+}
+
 func (r *ValkeyAdapter) RemoveMapEntry(key string, field string) valkey.Completed {
 	return r.client.B().Hdel().Key(key).Field(field).Build()
+}
+
+type OperationArgs struct {
+	Label    string
+	Value    string
+	IntValue int64
+	MapValue map[string]string
+}
+
+type OperationDef struct {
+	LoopOverAllLabels bool
+	BuildVariableCmd  func(a *ValkeyAdapter, key string, args OperationArgs) valkey.Completed
+}
+
+// operationDefs holds the definition for each VariableUpdateOperation.
+var operationDefs = map[mdaiv1.VariableUpdateOperation]OperationDef{
+	VariableUpdateSetAddElement: {
+		LoopOverAllLabels: true,
+		BuildVariableCmd: func(a *ValkeyAdapter, key string, args OperationArgs) valkey.Completed {
+			return a.AddElementToSet(key, args.Value)
+		},
+	},
+	VariableUpdateSetRemoveElement: {
+		LoopOverAllLabels: true,
+		BuildVariableCmd: func(a *ValkeyAdapter, key string, args OperationArgs) valkey.Completed {
+			return a.RemoveElementFromSet(key, args.Value)
+		},
+	},
+	// --- single‐label operations ---
+	VariableUpdateBulkSetKeyValue: {
+		BuildVariableCmd: func(a *ValkeyAdapter, key string, args OperationArgs) valkey.Completed {
+			return a.BulkSetMap(key, args.MapValue)
+		},
+	},
+	VariableUpdateSet: {
+		BuildVariableCmd: func(a *ValkeyAdapter, key string, args OperationArgs) valkey.Completed {
+			return a.SetString(key, args.Value)
+		},
+	},
+	VariableUpdateDelete: {
+		BuildVariableCmd: func(a *ValkeyAdapter, key string, args OperationArgs) valkey.Completed {
+			return a.DeleteString(key)
+		},
+	},
+	VariableUpdateIntIncrBy: {
+		BuildVariableCmd: func(a *ValkeyAdapter, key string, args OperationArgs) valkey.Completed {
+			return a.IntIncrBy(key, args.IntValue)
+		},
+	},
+	VariableUpdateIntDecrBy: {
+		BuildVariableCmd: func(a *ValkeyAdapter, key string, args OperationArgs) valkey.Completed {
+			return a.IntDecrBy(key, args.IntValue)
+		},
+	},
+	VariableUpdateSetMapEntry: {
+		BuildVariableCmd: func(a *ValkeyAdapter, key string, args OperationArgs) valkey.Completed {
+			return a.SetMapEntry(key, args.Label, args.Value)
+		},
+	},
+	VariableUpdateRemoveMapEntry: {
+		BuildVariableCmd: func(a *ValkeyAdapter, key string, args OperationArgs) valkey.Completed {
+			return a.RemoveMapEntry(key, args.Label)
+		},
+	},
+}
+
+func (r *ValkeyAdapter) GetOperationDef(operation mdaiv1.VariableUpdateOperation) (OperationDef, bool) {
+	def, found := operationDefs[operation]
+	return def, found
 }
