@@ -306,6 +306,7 @@ jobs:
         with:
           app-id: ${{ vars.PLATFORM_HEALTH_ACCESS_APP_ID }}
           private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
 
       - name: Set safe git directory
         env:
