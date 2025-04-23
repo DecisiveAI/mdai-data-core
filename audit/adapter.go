@@ -3,6 +3,7 @@ package audit
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"iter"
 	"net/http"
@@ -11,11 +12,9 @@ import (
 	"strings"
 	"time"
 
+	mdaiv1 "github.com/decisiveai/mdai-operator/api/v1"
 	"github.com/go-logr/logr"
 	"github.com/prometheus/alertmanager/template"
-	"go.uber.org/multierr"
-
-	mdaiv1 "github.com/decisiveai/mdai-operator/api/v1"
 
 	"github.com/valkey-io/valkey-go"
 )
@@ -270,16 +269,13 @@ func (c *AuditAdapter) getAuditLogTTLMinId() string {
 }
 
 func (c *AuditAdapter) accumulateValkeyErrors(results []valkey.ValkeyResult, key string) error {
-	var valkeyMultiErr error
+	var errs []error
 	for _, result := range results {
-		err := result.Error()
-		if err != nil {
-			wrapped := fmt.Errorf(
-				"operation failed on key %s: %w", key, err,
-			)
-			valkeyMultiErr = multierr.Append(valkeyMultiErr, wrapped)
+		if err := result.Error(); err != nil {
+			wrapped := fmt.Errorf("operation failed on key %s: %w", key, err)
 			c.logger.Error(wrapped, "Valkey error")
+			errs = append(errs, wrapped)
 		}
 	}
-	return valkeyMultiErr
+	return errors.Join(errs...)
 }
