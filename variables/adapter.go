@@ -21,7 +21,6 @@ const (
 	VariableUpdateSetMapEntry      mdaiv1.VariableUpdateOperation = "mdai/map_set_entry"
 	VariableUpdateRemoveMapEntry   mdaiv1.VariableUpdateOperation = "mdai/map_remove_entry"
 	VariableUpdateBulkSetKeyValue  mdaiv1.VariableUpdateOperation = "mdai/bulk_set_key_value"
-	nilError                       string                         = "valkey nil message"
 )
 
 type ValkeyAdapter struct {
@@ -45,7 +44,7 @@ func (r *ValkeyAdapter) GetOrCreateMetaPriorityList(ctx context.Context, key str
 	if err == nil {
 		return list, true, nil
 	}
-	if err.Error() == nilError {
+	if valkey.IsValkeyNil(err) {
 		r.logger.Info("no value found for references", "key", key)
 		return nil, false, nil
 	}
@@ -57,7 +56,7 @@ func (r *ValkeyAdapter) GetOrCreateMetaHashSet(ctx context.Context, key string, 
 	if err == nil {
 		return value, true, nil
 	}
-	if err.Error() == nilError {
+	if valkey.IsValkeyNil(err) {
 		r.logger.Info("no value found for references", "key", key)
 		return "", false, nil
 	}
@@ -79,7 +78,7 @@ func (r *ValkeyAdapter) GetSetAsStringSlice(ctx context.Context, key string) ([]
 func (r *ValkeyAdapter) GetString(ctx context.Context, key string) (string, bool, error) {
 	value, err := r.client.Do(ctx, r.client.B().Get().Key(key).Build()).ToString()
 	if err != nil {
-		if err.Error() == nilError {
+		if valkey.IsValkeyNil(err) {
 			r.logger.Info("No value found in Valkey", "key", key)
 			return "", false, nil
 		}
