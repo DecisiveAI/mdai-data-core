@@ -2,7 +2,6 @@ package ValkeyAdapter
 
 import (
 	"context"
-	"errors"
 
 	mdaiv1 "github.com/decisiveai/mdai-operator/api/v1"
 	"github.com/go-logr/logr"
@@ -22,10 +21,7 @@ const (
 	VariableUpdateSetMapEntry      mdaiv1.VariableUpdateOperation = "mdai/map_set_entry"
 	VariableUpdateRemoveMapEntry   mdaiv1.VariableUpdateOperation = "mdai/map_remove_entry"
 	VariableUpdateBulkSetKeyValue  mdaiv1.VariableUpdateOperation = "mdai/bulk_set_key_value"
-)
-
-var (
-	ErrValkeyNilMessage = errors.New("valkey nil message")
+	nilError                       string                         = "valkey nil message"
 )
 
 type ValkeyAdapter struct {
@@ -44,6 +40,30 @@ func ComposeValkeyKey(mdaiCRName string, variableStorageKey string) string {
 	return VariableKeyPrefix + mdaiCRName + "/" + variableStorageKey
 }
 
+func (r *ValkeyAdapter) GetOrCreateMetaPriorityList(ctx context.Context, key string, refs []string) ([]string, bool, error) {
+	list, err := r.client.Do(ctx, r.client.B().Arbitrary("PRIORITYLIST.GETORCREATE").Keys(key).Args(refs...).Build()).AsStrSlice()
+	if err == nil {
+		return list, true, nil
+	}
+	if err.Error() == nilError {
+		r.logger.Info("no value found for references", "key", key)
+		return nil, false, nil
+	}
+	return nil, false, err
+}
+
+func (r *ValkeyAdapter) GetOrCreateMetaHashSet(ctx context.Context, key string, stringKey string, setKey string) (string, bool, error) {
+	value, err := r.client.Do(ctx, r.client.B().Arbitrary("HASHSET.GETORCREATE").Keys(key).Args(stringKey, setKey).Build()).ToString()
+	if err == nil {
+		return value, true, nil
+	}
+	if err.Error() == nilError {
+		r.logger.Info("no value found for references", "key", key)
+		return "", false, nil
+	}
+	return "", false, err
+}
+
 func (r *ValkeyAdapter) GetSetAsStringSlice(ctx context.Context, key string) ([]string, error) {
 	valueAsSlice, err := r.client.Do(ctx, r.client.B().Smembers().Key(key).Build()).AsStrSlice()
 	if err != nil {
@@ -59,7 +79,7 @@ func (r *ValkeyAdapter) GetSetAsStringSlice(ctx context.Context, key string) ([]
 func (r *ValkeyAdapter) GetString(ctx context.Context, key string) (string, bool, error) {
 	value, err := r.client.Do(ctx, r.client.B().Get().Key(key).Build()).ToString()
 	if err != nil {
-		if errors.Is(err, ErrValkeyNilMessage) {
+		if err.Error() == nilError {
 			r.logger.Info("No value found in Valkey", "key", key)
 			return "", false, nil
 		}
