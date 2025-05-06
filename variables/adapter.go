@@ -3,9 +3,10 @@ package ValkeyAdapter
 import (
 	"context"
 	"errors"
+	"go.uber.org/zap"
 
 	mdaiv1 "github.com/decisiveai/mdai-operator/api/v1"
-	"github.com/go-logr/logr"
+
 	"github.com/valkey-io/valkey-go"
 	"gopkg.in/yaml.v3"
 )
@@ -30,10 +31,10 @@ var (
 
 type ValkeyAdapter struct {
 	client valkey.Client
-	logger logr.Logger
+	logger *zap.Logger
 }
 
-func NewValkeyAdapter(client valkey.Client, logger logr.Logger) *ValkeyAdapter {
+func NewValkeyAdapter(client valkey.Client, logger *zap.Logger) *ValkeyAdapter {
 	return &ValkeyAdapter{
 		client: client,
 		logger: logger,
@@ -47,10 +48,10 @@ func ComposeValkeyKey(mdaiCRName string, variableStorageKey string) string {
 func (r *ValkeyAdapter) GetSetAsStringSlice(ctx context.Context, key string) ([]string, error) {
 	valueAsSlice, err := r.client.Do(ctx, r.client.B().Smembers().Key(key).Build()).AsStrSlice()
 	if err != nil {
-		r.logger.Error(err, "Failed to get set value from Valkey", "key", key)
+		r.logger.Warn("Failed to get set value from Valkey", zap.Error(err), zap.String("key", key))
 		return nil, err
 	}
-	r.logger.Info("Valkey data received", "key", key, "valueAsSlice", valueAsSlice)
+	r.logger.Info("Valkey data received", zap.String("key", key), zap.Strings("valueAsSlice", valueAsSlice))
 	return valueAsSlice, nil
 }
 
@@ -60,10 +61,10 @@ func (r *ValkeyAdapter) GetString(ctx context.Context, key string) (string, bool
 	value, err := r.client.Do(ctx, r.client.B().Get().Key(key).Build()).ToString()
 	if err != nil {
 		if errors.Is(err, ErrValkeyNilMessage) {
-			r.logger.Info("No value found in Valkey", "key", key)
+			r.logger.Info("No value found in Valkey", zap.String("key", key))
 			return "", false, nil
 		}
-		r.logger.Error(err, "Failed to get String value from Valkey", "key", key)
+		r.logger.Error("Failed to get String value from Valkey", zap.Error(err), zap.String("key", key))
 		return "", false, err
 	}
 	return value, true, nil
@@ -72,12 +73,12 @@ func (r *ValkeyAdapter) GetString(ctx context.Context, key string) (string, bool
 func (r *ValkeyAdapter) GetMapAsString(ctx context.Context, key string) (string, error) {
 	valueAsMap, err := r.client.Do(ctx, r.client.B().Hgetall().Key(key).Build()).AsStrMap()
 	if err != nil {
-		r.logger.Error(err, "Failed to get Map value from Valkey", "key", key)
+		r.logger.Error("Failed to get Map value from Valkey", zap.Error(err), zap.String("key", key))
 		return "", err
 	}
 	yamlData, err := yaml.Marshal(valueAsMap)
 	if err != nil {
-		r.logger.Error(err, "Failed to marshal Map to YAML", "key", key)
+		r.logger.Error("Failed to marshal Map to YAML", zap.Error(err), zap.String("key", key))
 		return "", err
 	}
 	return string(yamlData), nil
