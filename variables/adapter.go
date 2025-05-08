@@ -122,7 +122,7 @@ func (r *ValkeyAdapter) GetMapAsString(ctx context.Context, variableKey string) 
 		return "", err
 	}
 
-	data := make(map[string]interface{}, len(raw))
+	data := make(map[string]any, len(raw))
 	for k, v := range raw {
 		if i, err := strconv.Atoi(v); err == nil {
 			data[k] = i // store as int
