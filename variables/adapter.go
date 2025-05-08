@@ -3,11 +3,11 @@ package ValkeyAdapter
 import (
 	"context"
 	"fmt"
+	"go.uber.org/zap"
 	"strconv"
 	"strings"
 
 	mdaiv1 "github.com/decisiveai/mdai-operator/api/v1"
-	"github.com/go-logr/logr"
 	"github.com/valkey-io/valkey-go"
 	"gopkg.in/yaml.v3"
 )
@@ -28,14 +28,14 @@ const (
 
 type ValkeyAdapter struct {
 	client  valkey.Client
-	logger  logr.Logger
+	Logger  *zap.Logger
 	hubName string
 }
 
-func NewValkeyAdapter(client valkey.Client, logger logr.Logger, hubName string) *ValkeyAdapter {
+func NewValkeyAdapter(client valkey.Client, logger *zap.Logger, hubName string) *ValkeyAdapter {
 	return &ValkeyAdapter{
 		client:  client,
-		logger:  logger,
+		Logger:  logger,
 		hubName: hubName,
 	}
 }
@@ -57,12 +57,12 @@ func (r *ValkeyAdapter) GetOrCreateMetaPriorityList(ctx context.Context, variabl
 	refs := r.prefixedRefs(variableRefs)
 	list, err := r.client.Do(ctx, r.client.B().Arbitrary("PRIORITYLIST.GETORCREATE").Keys(key).Args(refs...).Build()).AsStrSlice()
 	if err == nil {
-		r.logger.Info(fmt.Sprintf("Data received for %s: %s", key, list))
+		r.Logger.Info(fmt.Sprintf("Data received for %s: %s", key, list))
 		return list, true, nil
 	}
 
 	if valkey.IsValkeyNil(err) {
-		r.logger.Info("No value found for references", "key", key)
+		r.Logger.Info("No value found for references", zap.String("key", key))
 		return nil, false, nil
 	}
 	return nil, false, err
@@ -74,12 +74,12 @@ func (r *ValkeyAdapter) GetOrCreateMetaHashSet(ctx context.Context, variableKey 
 	setKey := r.composeStorageKey(variableSetKey)
 	value, err := r.client.Do(ctx, r.client.B().Arbitrary("HASHSET.GETORCREATE").Keys(key).Args(stringKey, setKey).Build()).ToString()
 	if err == nil {
-		r.logger.Info(fmt.Sprintf("Data received for %s: %s", key, value))
+		r.Logger.Info(fmt.Sprintf("Data received for %s: %s", key, value))
 		return value, true, nil
 	}
 
 	if valkey.IsValkeyNil(err) {
-		r.logger.Info("No value found for references", "key", key)
+		r.Logger.Info("No value found for references", zap.Error(err), zap.String("key", key))
 		return "", false, nil
 	}
 	return "", false, err
@@ -89,11 +89,11 @@ func (r *ValkeyAdapter) GetSetAsStringSlice(ctx context.Context, variableKey str
 	key := r.composeStorageKey(variableKey)
 	valueAsSlice, err := r.client.Do(ctx, r.client.B().Smembers().Key(key).Build()).AsStrSlice()
 	if err != nil {
-		r.logger.Error(err, "failed to get a Set value from storage", "key", key)
+		r.Logger.Error("failed to get a Set value from storage", zap.Error(err), zap.String("key", key))
 		return nil, err
 	}
 
-	r.logger.Info(fmt.Sprintf("Data received for %s: %s", key, valueAsSlice))
+	r.Logger.Info(fmt.Sprintf("Data received for %s: %s", key, valueAsSlice))
 	return valueAsSlice, nil
 }
 
@@ -104,13 +104,13 @@ func (r *ValkeyAdapter) GetString(ctx context.Context, variableKey string) (stri
 	value, err := r.client.Do(ctx, r.client.B().Get().Key(key).Build()).ToString()
 	if err != nil {
 		if valkey.IsValkeyNil(err) {
-			r.logger.Info("No value found in storage", "key", key)
+			r.Logger.Info("No value found in storage", zap.String("key", key))
 			return "", false, nil
 		}
-		r.logger.Error(err, "failed to get String value from storage", "key", key)
+		r.Logger.Error("failed to get String value from storage", zap.Error(err), zap.String("key", key))
 		return "", false, err
 	}
-	r.logger.Info(fmt.Sprintf("Data received for %s: %s", key, value))
+	r.Logger.Info(fmt.Sprintf("Data received for %s: %s", key, value))
 	return value, true, nil
 }
 
@@ -118,7 +118,7 @@ func (r *ValkeyAdapter) GetMapAsString(ctx context.Context, variableKey string) 
 	key := r.composeStorageKey(variableKey)
 	raw, err := r.client.Do(ctx, r.client.B().Hgetall().Key(key).Build()).AsStrMap()
 	if err != nil {
-		r.logger.Error(err, "failed to get Map value from storage", "key", key)
+		r.Logger.Error("failed to get Map value from storage", zap.Error(err), zap.String("key", key))
 		return "", err
 	}
 
@@ -135,16 +135,18 @@ func (r *ValkeyAdapter) GetMapAsString(ctx context.Context, variableKey string) 
 
 	yamlData, err := yaml.Marshal(data)
 	if err != nil {
-		r.logger.Error(err, "failed to marshal Map to YAML", "key", key)
+		r.Logger.Error("failed to marshal Map to YAML", zap.Error(err), zap.String("key", key))
 		return "", err
 	}
 
-	r.logger.Info(fmt.Sprintf("Data received for %s: %s", key, string(yamlData)))
+	r.Logger.Info(fmt.Sprintf("Data received for %s: %s", key, string(yamlData)))
 	return string(yamlData), nil
 }
 
 func (r *ValkeyAdapter) AddElementToSet(variableKey string, value string) valkey.Completed {
 	key := r.composeStorageKey(variableKey)
+	r.Logger.Info("Adding element to set", zap.String("variableKey", variableKey), zap.String("value", value), zap.String("key", key))
+
 	return r.client.B().Sadd().Key(key).Member(value).Build()
 }
 
