@@ -203,7 +203,10 @@ func (r *ValkeyAdapter) DeleteKeysWithPrefixUsingScan(ctx context.Context, keep 
 			return fmt.Errorf("failed to scan with prefix %s: %w", prefix, err)
 		}
 		for _, k := range scanResult.Elements {
-			res, _ := strings.CutPrefix(k, prefix)
+			res, found := strings.CutPrefix(k, prefix)
+			if !found {
+				return fmt.Errorf("failed to parse prefix for key %s: %w", k, err)
+			}
 			if _, exists := keep[res]; exists {
 				continue
 			}
