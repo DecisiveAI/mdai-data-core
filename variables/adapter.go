@@ -27,13 +27,15 @@ const (
 )
 
 type ValkeyAdapter struct {
+	ctx     context.Context
 	client  valkey.Client
 	Logger  *zap.Logger
 	hubName string
 }
 
-func NewValkeyAdapter(client valkey.Client, logger *zap.Logger, hubName string) *ValkeyAdapter {
+func NewValkeyAdapter(ctx context.Context, client valkey.Client, logger *zap.Logger, hubName string) *ValkeyAdapter {
 	return &ValkeyAdapter{
+		ctx:     ctx,
 		client:  client,
 		Logger:  logger,
 		hubName: hubName,
@@ -147,7 +149,9 @@ func (r *ValkeyAdapter) AddElementToSet(variableKey string, value string) valkey
 	key := r.composeStorageKey(variableKey)
 	r.Logger.Info("Adding element to set", zap.String("variableKey", variableKey), zap.String("value", value), zap.String("key", key))
 
-	return r.client.B().Sadd().Key(key).Member(value).Build()
+	cmd := r.client.B().Sadd().Key(key).Member(value).Build()
+	r.client.Do(r.ctx, cmd)
+	return cmd
 }
 
 func (r *ValkeyAdapter) RemoveElementFromSet(variableKey string, value string) valkey.Completed {
