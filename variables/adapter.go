@@ -45,12 +45,18 @@ func WithValkeyAuditStreamExpiry(expiry time.Duration) ValkeyAdapterOption {
 }
 
 func NewValkeyAdapter(client valkey.Client, logger logr.Logger, hubName string, opts ...ValkeyAdapterOption) *ValkeyAdapter {
-	return &ValkeyAdapter{
+	va := &ValkeyAdapter{
 		client:                  client,
 		logger:                  logger,
 		hubName:                 hubName,
 		valkeyAuditStreamExpiry: 30 * 24 * time.Hour,
 	}
+
+	for _, opt := range opts {
+		opt(va)
+	}
+
+	return va
 }
 
 func (r *ValkeyAdapter) composeStorageKey(variableStorageKey string) string {

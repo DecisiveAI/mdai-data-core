@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/decisiveai/mdai-data-core/audit"
 	mdaiv1 "github.com/decisiveai/mdai-operator/api/v1"
@@ -293,4 +294,17 @@ func TestGetOrCreateMetaHashSet(t *testing.T) {
 	assert.NoError(t, err)
 	assert.False(t, found)
 	assert.Empty(t, got)
+}
+
+func TestWithValkeyAuditStreamExpiryOption(t *testing.T) {
+	defaultTTL := 30 * 24 * time.Hour
+
+	a1 := NewValkeyAdapter(nil, logr.Discard(), "hub")
+	assert.Equal(t, defaultTTL, a1.valkeyAuditStreamExpiry)
+
+	customTTL := 12 * time.Hour
+	a2 := NewValkeyAdapter(nil, logr.Discard(), "hub",
+		WithValkeyAuditStreamExpiry(customTTL),
+	)
+	assert.Equal(t, customTTL, a2.valkeyAuditStreamExpiry)
 }
