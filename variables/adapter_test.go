@@ -216,3 +216,81 @@ func TestDoVariableUpdateAndLog_ErrorAggregated(t *testing.T) {
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "boom")
 }
+
+func TestGetOrCreateMetaPriorityList(t *testing.T) {
+	adapter, client, ctx, ctrl := newAdapterWithMock(t)
+	defer ctrl.Finish()
+
+	varKey := "parent"
+	refs := []string{"ref1", "ref2"}
+	hubKey := "variable/hub/"
+	key := hubKey + varKey
+	r1, r2 := hubKey+refs[0], hubKey+refs[1]
+
+	client.
+		EXPECT().
+		Do(ctx,
+			vmock.Match("PRIORITYLIST.GETORCREATE", key, r1, r2),
+		).
+		Return(vmock.Result(
+			vmock.ValkeyArray(
+				vmock.ValkeyBlobString(r1),
+				vmock.ValkeyBlobString(r2),
+			),
+		))
+
+	list, found, err := adapter.GetOrCreateMetaPriorityList(ctx, varKey, refs)
+	assert.NoError(t, err)
+	assert.True(t, found)
+	assert.Equal(t, []string{r1, r2}, list)
+
+	client.
+		EXPECT().
+		Do(ctx,
+			vmock.Match("PRIORITYLIST.GETORCREATE", key, r1, r2),
+		).
+		Return(vmock.Result(vmock.ValkeyNil()))
+
+	list, found, err = adapter.GetOrCreateMetaPriorityList(ctx, varKey, refs)
+	assert.NoError(t, err)
+	assert.False(t, found)
+	assert.Nil(t, list)
+}
+
+func TestGetOrCreateMetaHashSet(t *testing.T) {
+	adapter, client, ctx, ctrl := newAdapterWithMock(t)
+	defer ctrl.Finish()
+
+	varKey := "color"
+	strKeyInput := "strKey"
+	setKeyInput := "setKey"
+	hubKey := "variable/hub/"
+	key := hubKey + varKey
+	strKey := hubKey + strKeyInput
+	setKey := hubKey + setKeyInput
+	wantVal := "blue"
+
+	client.
+		EXPECT().
+		Do(ctx,
+			vmock.Match("HASHSET.GETORCREATE", key, strKey, setKey),
+		).
+		Return(vmock.Result(vmock.ValkeyBlobString(wantVal)))
+
+	got, found, err := adapter.GetOrCreateMetaHashSet(ctx, varKey, strKeyInput, setKeyInput)
+	assert.NoError(t, err)
+	assert.True(t, found)
+	assert.Equal(t, wantVal, got)
+
+	client.
+		EXPECT().
+		Do(ctx,
+			vmock.Match("HASHSET.GETORCREATE", key, strKey, setKey),
+		).
+		Return(vmock.Result(vmock.ValkeyNil()))
+
+	got, found, err = adapter.GetOrCreateMetaHashSet(ctx, varKey, strKeyInput, setKeyInput)
+	assert.NoError(t, err)
+	assert.False(t, found)
+	assert.Empty(t, got)
+}
