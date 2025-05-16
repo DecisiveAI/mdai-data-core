@@ -1,5 +1,5 @@
 # mdai-data-core
-![Coverage](https://img.shields.io/badge/Coverage-0-red)
+![Coverage](https://img.shields.io/badge/Coverage-1-red)
 
 ## Getting Started
 ### Importing mdai-operator module from private repo
