@@ -97,6 +97,32 @@ func TestGetMapAsString_YAMLConversion(t *testing.T) {
 	assert.Equal(t, expected, got)
 }
 
+func TestGetMap(t *testing.T) {
+	adapter, client, ctx, ctrl := newAdapterWithMock(t)
+	defer ctrl.Finish()
+
+	key := "variable/hub/myhash"
+
+	client.EXPECT().
+		Do(ctx, vmock.Match("HGETALL", key)).
+		Return(vmock.Result(vmock.ValkeyMap(map[string]valkey.ValkeyMessage{
+			"a": vmock.ValkeyBlobString("1"),
+			"b": vmock.ValkeyBlobString("two"),
+			"c": vmock.ValkeyBlobString("3.14"),
+		})))
+
+	got, err := adapter.GetMap(ctx, "myhash")
+	assert.NoError(t, err)
+
+	expected := map[string]string{
+		"a": "1",    // int
+		"b": "two",  // string
+		"c": "3.14", // float64
+	}
+
+	assert.Equal(t, expected, got)
+}
+
 func TestGetOperationDef(t *testing.T) {
 	adapter := NewValkeyAdapter(nil, logr.Discard(), "hub")
 
