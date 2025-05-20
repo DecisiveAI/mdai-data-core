@@ -44,6 +44,7 @@ func TestStructuredLogging(t *testing.T) {
 				RelevantLabelValues: "instance=foo",
 			},
 			expectedData: map[string]string{
+				"mdai-logstream":      "audit",
 				"hubName":             "test-hub",
 				"event":               "update",
 				"status":              "success",

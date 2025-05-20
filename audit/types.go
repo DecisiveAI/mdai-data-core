@@ -46,6 +46,7 @@ func (hubEvent MdaiHubEvent) ToSequence() iter.Seq2[string, string] {
 }
 
 func (hubEvent MdaiHubEvent) MarshalLogObject(enc zapcore.ObjectEncoder) error {
+	enc.AddString("mdai-logstream", "audit")
 	enc.AddString("hubName", hubEvent.HubName)
 	enc.AddString("event", hubEvent.Event)
 	enc.AddString("status", hubEvent.Status)
