@@ -13,7 +13,6 @@ import (
 
 	mdaiv1 "github.com/decisiveai/mdai-operator/api/v1"
 	"github.com/prometheus/alertmanager/template"
-
 	"github.com/valkey-io/valkey-go"
 )
 

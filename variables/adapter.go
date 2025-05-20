@@ -4,13 +4,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
+
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/go-logr/logr"
+
 	"github.com/decisiveai/mdai-data-core/audit"
 	mdaiv1 "github.com/decisiveai/mdai-operator/api/v1"
-	"github.com/go-logr/logr"
 	"github.com/valkey-io/valkey-go"
 	"gopkg.in/yaml.v3"
 )
