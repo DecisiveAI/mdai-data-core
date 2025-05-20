@@ -4,10 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"go.uber.org/zap"
+
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/go-logr/logr"
 
 	"github.com/decisiveai/mdai-data-core/audit"
 	mdaiv1 "github.com/decisiveai/mdai-operator/api/v1"
@@ -31,7 +33,7 @@ const (
 
 type ValkeyAdapter struct {
 	client                  valkey.Client
-	Logger  *zap.Logger
+	logger                  logr.Logger
 	hubName                 string
 	valkeyAuditStreamExpiry time.Duration
 }
@@ -44,10 +46,10 @@ func WithValkeyAuditStreamExpiry(expiry time.Duration) ValkeyAdapterOption {
 	}
 }
 
-func NewValkeyAdapter(client valkey.Client, logger *zap.Logger, hubName string, opts ...ValkeyAdapterOption) *ValkeyAdapter {
+func NewValkeyAdapter(client valkey.Client, logger logr.Logger, hubName string, opts ...ValkeyAdapterOption) *ValkeyAdapter {
 	va := &ValkeyAdapter{
 		client:                  client,
-		Logger:                  logger,
+		logger:                  logger,
 		hubName:                 hubName,
 		valkeyAuditStreamExpiry: 30 * 24 * time.Hour,
 	}
@@ -76,12 +78,12 @@ func (r *ValkeyAdapter) GetOrCreateMetaPriorityList(ctx context.Context, variabl
 	refs := r.prefixedRefs(variableRefs)
 	list, err := r.client.Do(ctx, r.client.B().Arbitrary("PRIORITYLIST.GETORCREATE").Keys(key).Args(refs...).Build()).AsStrSlice()
 	if err == nil {
-		r.Logger.Info(fmt.Sprintf("Data received for %s: %s", key, list))
+		r.logger.Info(fmt.Sprintf("Data received for %s: %s", key, list))
 		return list, true, nil
 	}
 
 	if valkey.IsValkeyNil(err) {
-		r.Logger.Info("No value found for references", zap.String("key", key))
+		r.logger.Info("No value found for references", "key", key)
 		return nil, false, nil
 	}
 	return nil, false, err
@@ -93,12 +95,12 @@ func (r *ValkeyAdapter) GetOrCreateMetaHashSet(ctx context.Context, variableKey 
 	setKey := r.composeStorageKey(variableSetKey)
 	value, err := r.client.Do(ctx, r.client.B().Arbitrary("HASHSET.GETORCREATE").Keys(key).Args(stringKey, setKey).Build()).ToString()
 	if err == nil {
-		r.Logger.Info(fmt.Sprintf("Data received for %s: %s", key, value))
+		r.logger.Info(fmt.Sprintf("Data received for %s: %s", key, value))
 		return value, true, nil
 	}
 
 	if valkey.IsValkeyNil(err) {
-		r.Logger.Info("No value found for references", zap.Error(err), zap.String("key", key))
+		r.logger.Info("No value found for references", "key", key)
 		return "", false, nil
 	}
 	return "", false, err
@@ -108,11 +110,11 @@ func (r *ValkeyAdapter) GetSetAsStringSlice(ctx context.Context, variableKey str
 	key := r.composeStorageKey(variableKey)
 	valueAsSlice, err := r.client.Do(ctx, r.client.B().Smembers().Key(key).Build()).AsStrSlice()
 	if err != nil {
-		r.Logger.Error("failed to get a Set value from storage", zap.Error(err), zap.String("key", key))
+		r.logger.Error(err, "failed to get a Set value from storage", "key", key)
 		return nil, err
 	}
 
-	r.Logger.Info(fmt.Sprintf("Data received for %s: %s", key, valueAsSlice))
+	r.logger.Info(fmt.Sprintf("Data received for %s: %s", key, valueAsSlice))
 	return valueAsSlice, nil
 }
 
@@ -123,13 +125,13 @@ func (r *ValkeyAdapter) GetString(ctx context.Context, variableKey string) (stri
 	value, err := r.client.Do(ctx, r.client.B().Get().Key(key).Build()).ToString()
 	if err != nil {
 		if valkey.IsValkeyNil(err) {
-			r.Logger.Info("No value found in storage", zap.String("key", key))
+			r.logger.Info("No value found in storage", "key", key)
 			return "", false, nil
 		}
-		r.Logger.Error("failed to get String value from storage", zap.Error(err), zap.String("key", key))
+		r.logger.Error(err, "failed to get String value from storage", "key", key)
 		return "", false, err
 	}
-	r.Logger.Info(fmt.Sprintf("Data received for %s: %s", key, value))
+	r.logger.Info(fmt.Sprintf("Data received for %s: %s", key, value))
 	return value, true, nil
 }
 
@@ -137,7 +139,7 @@ func (r *ValkeyAdapter) GetMapAsString(ctx context.Context, variableKey string) 
 	key := r.composeStorageKey(variableKey)
 	raw, err := r.client.Do(ctx, r.client.B().Hgetall().Key(key).Build()).AsStrMap()
 	if err != nil {
-		r.Logger.Error("failed to get Map value from storage", zap.Error(err), zap.String("key", key))
+		r.logger.Error(err, "failed to get Map value from storage", "key", key)
 		return "", err
 	}
 
@@ -154,18 +156,17 @@ func (r *ValkeyAdapter) GetMapAsString(ctx context.Context, variableKey string) 
 
 	yamlData, err := yaml.Marshal(data)
 	if err != nil {
-		r.Logger.Error("failed to marshal Map to YAML", zap.Error(err), zap.String("key", key))
+		r.logger.Error(err, "failed to marshal Map to YAML", "key", key)
 		return "", err
 	}
 
-	r.Logger.Info(fmt.Sprintf("Data received for %s: %s", key, string(yamlData)))
+	r.logger.Info(fmt.Sprintf("Data received for %s: %s", key, string(yamlData)))
 	return string(yamlData), nil
 }
 
 func (r *ValkeyAdapter) AddElementToSet(variableKey string, value string) valkey.Completed {
 	key := r.composeStorageKey(variableKey)
-	r.Logger.Info("Adding element to set", zap.String("variableKey", variableKey), zap.String("value", value), zap.String("key", key))
-
+	r.logger.Info("Adding element to set", "variableKey", variableKey, "value", value, "key", key)
 	return r.client.B().Sadd().Key(key).Member(value).Build()
 }
 
@@ -213,43 +214,43 @@ func (r *ValkeyAdapter) RemoveMapEntry(variableKey string, field string) valkey.
 	return r.client.B().Hdel().Key(key).Field(field).Build()
 }
 
-func (c *ValkeyAdapter) DoVariableUpdateAndLog(ctx context.Context, variableUpdate *mdaiv1.VariableUpdate, mdaiHubAction audit.MdaiHubAction, valkeyKey string, mapKey string, value string, intValue int64) (bool, error) {
-	c.logger.Info(fmt.Sprintf("Performing %s operation", mdaiHubAction.Operation), "variable", valkeyKey, "mdaiHubAction", mdaiHubAction)
-	auditLogCommand := c.makeAuditLogActionCommand(mdaiHubAction)
+func (r *ValkeyAdapter) DoVariableUpdateAndLog(ctx context.Context, variableUpdate *mdaiv1.VariableUpdate, mdaiHubAction audit.MdaiHubAction, valkeyKey string, mapKey string, value string, intValue int64) (bool, error) {
+	r.logger.Info(fmt.Sprintf("Performing %s operation", mdaiHubAction.Operation), "variable", valkeyKey, "mdaiHubAction", mdaiHubAction)
+	auditLogCommand := r.makeAuditLogActionCommand(mdaiHubAction)
 
-	def, found := c.GetOperationDef(variableUpdate.Operation)
+	def, found := r.GetOperationDef(variableUpdate.Operation)
 	if !found {
 		return false, nil
 	}
 
-	variableUpdateCommand := def.BuildVariableCmd(c, valkeyKey, OperationArgs{
+	variableUpdateCommand := def.BuildVariableCmd(r, valkeyKey, OperationArgs{
 		MapKey:   mapKey,
 		Value:    value,
 		IntValue: intValue, // TODO this is a placeholder for int value
 	})
-	results := c.client.DoMulti(ctx,
+	results := r.client.DoMulti(ctx,
 		variableUpdateCommand,
 		auditLogCommand,
 	)
-	valkeyMultiErr := c.accumulateValkeyErrors(results, valkeyKey) // TODO we should probably retry here
+	valkeyMultiErr := r.accumulateValkeyErrors(results, valkeyKey) // TODO we should probably retry here
 	return true, valkeyMultiErr
 }
 
-func (c *ValkeyAdapter) accumulateValkeyErrors(results []valkey.ValkeyResult, key string) error {
+func (r *ValkeyAdapter) accumulateValkeyErrors(results []valkey.ValkeyResult, key string) error {
 	var errs []error
 	for _, result := range results {
 		if err := result.Error(); err != nil {
 			wrapped := fmt.Errorf("operation failed on key %s: %w", key, err)
-			c.logger.Error(wrapped, "Valkey error")
+			r.logger.Error(wrapped, "Valkey error")
 			errs = append(errs, wrapped)
 		}
 	}
 	return errors.Join(errs...)
 }
 
-func (c *ValkeyAdapter) makeAuditLogActionCommand(mdaiHubAction audit.MdaiHubAction) valkey.Completed {
-	return c.client.B().Xadd().Key(audit.MdaiHubEventHistoryStreamName).Minid().
-		Threshold(audit.GetAuditLogTTLMinId(c.valkeyAuditStreamExpiry)).
+func (r *ValkeyAdapter) makeAuditLogActionCommand(mdaiHubAction audit.MdaiHubAction) valkey.Completed {
+	return r.client.B().Xadd().Key(audit.MdaiHubEventHistoryStreamName).Minid().
+		Threshold(audit.GetAuditLogTTLMinId(r.valkeyAuditStreamExpiry)).
 		Id("*").FieldValue().FieldValueIter(mdaiHubAction.ToSequence()).
 		Build()
 }

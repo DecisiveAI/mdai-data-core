@@ -2,10 +2,6 @@ package audit
 
 import (
 	"context"
-	"encoding/json"
-	"errors"
-	"fmt"
-	"go.uber.org/zap"
 	"iter"
 	"regexp"
 	"strconv"
@@ -13,8 +9,8 @@ import (
 	"time"
 
 	mdaiv1 "github.com/decisiveai/mdai-operator/api/v1"
+	"github.com/go-logr/logr"
 	"github.com/prometheus/alertmanager/template"
-
 	"github.com/valkey-io/valkey-go"
 )
 
@@ -37,13 +33,13 @@ const (
 )
 
 type AuditAdapter struct {
-	logger                  *zap.Logger
+	logger                  logr.Logger
 	valkeyClient            valkey.Client
 	valkeyAuditStreamExpiry time.Duration
 }
 
 func NewAuditAdapter(
-	logger *zap.Logger,
+	logger logr.Logger,
 	valkeyClient valkey.Client,
 	valkeyAuditStreamExpiry time.Duration,
 ) *AuditAdapter {
@@ -70,7 +66,7 @@ func (c *AuditAdapter) HandleEventsGet(ctx context.Context) ([]map[string]any, e
 	for _, entry := range resultList {
 		entryMap, err := entry.AsXRangeEntry()
 		if err != nil {
-			c.logger.Fatal("failed to convert entry to map", zap.Error(err))
+			c.logger.Error(err, "failed to convert entry to map")
 			continue
 		}
 
@@ -156,7 +152,7 @@ func showHubCollectorRestartVariables(fields map[string]string) string {
 func (c *AuditAdapter) insertAuditLogEvent(ctx context.Context, mdaiHubEventIter iter.Seq2[string, string]) error {
 	result := c.valkeyClient.Do(ctx, c.valkeyClient.B().Xadd().Key(MdaiHubEventHistoryStreamName).Minid().Threshold(GetAuditLogTTLMinId(c.valkeyAuditStreamExpiry)).Id("*").FieldValue().FieldValueIter(mdaiHubEventIter).Build())
 	if err := result.Error(); err != nil {
-		c.logger.Warn("failed to append event to history stream", zap.Error(err), zap.String("stream", MdaiHubEventHistoryStreamName))
+		c.logger.Error(err, "failed to append event to history stream", "stream", MdaiHubEventHistoryStreamName)
 		return err
 	}
 	return nil
