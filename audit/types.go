@@ -3,18 +3,20 @@ package audit
 import (
 	"iter"
 	"time"
+
+	"go.uber.org/zap/zapcore"
 )
 
 type MdaiHubEvent struct {
-	HubName             string `json:"hub_name"`              //name of hub event was triggered
-	Event               string `json:"event"`                 //event type (evaluation/prometheus_alert)
-	Type                string `json:"type"`                  //triggered event
-	Name                string `json:"name"`                  //context; name of event to connect action
-	Expression          string `json:"expression"`            //context; expr used to trigger event
-	MetricName          string `json:"metric_name"`           //context; expr delta & metric measured by observer
-	Value               string `json:"value"`                 //payload; value of metric when event triggered
-	Status              string `json:"status"`                //payload; status of event (active, updated)
-	RelevantLabelValues string `json:"relevant_label_values"` //payload; variable triggering event
+	HubName             string `json:"hub_name"`              // name of hub event was triggered
+	Event               string `json:"event"`                 // event type (evaluation/prometheus_alert)
+	Type                string `json:"type"`                  // triggered event
+	Name                string `json:"name"`                  // context; name of event to connect action
+	Expression          string `json:"expression"`            // context; expr used to trigger event
+	MetricName          string `json:"metric_name"`           // context; expr delta & metric measured by observer
+	Value               string `json:"value"`                 // payload; value of metric when event triggered
+	Status              string `json:"status"`                // payload; status of event (active, updated)
+	RelevantLabelValues string `json:"relevant_label_values"` // payload; variable triggering event
 }
 
 func (hubEvent MdaiHubEvent) ToSequence() iter.Seq2[string, string] {
@@ -43,15 +45,27 @@ func (hubEvent MdaiHubEvent) ToSequence() iter.Seq2[string, string] {
 	}
 }
 
+func (hubEvent MdaiHubEvent) MarshalLogObject(enc zapcore.ObjectEncoder) error {
+	enc.AddString("hubName", hubEvent.HubName)
+	enc.AddString("event", hubEvent.Event)
+	enc.AddString("status", hubEvent.Status)
+	enc.AddString("type", hubEvent.Type)
+	enc.AddString("expression", hubEvent.Expression)
+	enc.AddString("metricName", hubEvent.MetricName)
+	enc.AddString("value", hubEvent.Value)
+	enc.AddString("relevantLabelValues", hubEvent.RelevantLabelValues)
+	return nil
+}
+
 type MdaiHubAction struct {
-	HubName     string `json:"hub_name"`     //name of hub action was triggered
-	Event       string `json:"event"`        //event type (action/update_variable)
-	Status      string `json:"status"`       //status of event
-	Type        string `json:"type"`         //type of action
-	Operation   string `json:"operation"`    //operation to perform (add_element, remove_element)
-	Target      string `json:"target"`       //target of action (ex. variable/mdaihub-sample/service_list)
-	VariableRef string `json:"variable_ref"` //variable affected by action
-	Variable    string `json:"variable"`     //variable value
+	HubName     string `json:"hub_name"`     // name of hub action was triggered
+	Event       string `json:"event"`        // event type (action/update_variable)
+	Status      string `json:"status"`       // status of event
+	Type        string `json:"type"`         // type of action
+	Operation   string `json:"operation"`    // operation to perform (add_element, remove_element)
+	Target      string `json:"target"`       // target of action (ex. variable/mdaihub-sample/service_list)
+	VariableRef string `json:"variable_ref"` // variable affected by action
+	Variable    string `json:"variable"`     // variable value
 }
 
 func (hubAction MdaiHubAction) ToSequence() iter.Seq2[string, string] {
@@ -77,4 +91,16 @@ func (hubAction MdaiHubAction) ToSequence() iter.Seq2[string, string] {
 			}
 		}
 	}
+}
+
+func (hubAction MdaiHubAction) MarshalLogObject(enc zapcore.ObjectEncoder) error {
+	enc.AddString("hub_name", hubAction.HubName)
+	enc.AddString("event", hubAction.Event)
+	enc.AddString("status", hubAction.Status)
+	enc.AddString("type", hubAction.Type)
+	enc.AddString("operation", hubAction.Operation)
+	enc.AddString("target", hubAction.Target)
+	enc.AddString("variable_ref", hubAction.VariableRef)
+	enc.AddString("variable", hubAction.Variable)
+	return nil
 }
