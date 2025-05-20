@@ -1,6 +1,6 @@
 .PHONY: test
 test: tidy vendor
-        CGO_ENABLED=0 go test -mod=vendor -v -count=1 ./...
+	CGO_ENABLED=0 go test -mod=vendor -v -count=1 ./...
 
 .PHONY: tidy
 tidy:
