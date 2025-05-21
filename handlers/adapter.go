@@ -55,6 +55,27 @@ func (r *HandlerAdapter) AddElementToSet(ctx context.Context, variableKey string
 	return r.accumulateErrors(results, variableKey) // TODO we should retry here
 }
 
+func (r *HandlerAdapter) RemoveElementFromSet(ctx context.Context, variableKey string, value string) error {
+	variableUpdateCommand := r.valkeyAdapter.RemoveElementFromSet(variableKey, value)
+	auditAction := StoreVariableAction{
+		HubName:     r.hubName,
+		EventId:     time.Now().String(),
+		Operation:   "Remove element from set",
+		Target:      variableKey,
+		VariableRef: value,
+		Variable:    value,
+	}
+	auditLogCommand := r.makeVariableAuditLogActionCommand(auditAction)
+
+	results := r.client.DoMulti(
+		ctx,
+		variableUpdateCommand,
+		auditLogCommand,
+	)
+
+	return r.accumulateErrors(results, variableKey) // TODO we should retry here
+}
+
 func (r *HandlerAdapter) accumulateErrors(results []valkey.ValkeyResult, key string) error {
 	var errs []string
 	for _, result := range results {
