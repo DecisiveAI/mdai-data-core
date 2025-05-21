@@ -34,7 +34,6 @@ const (
 type ValkeyAdapter struct {
 	client                  valkey.Client
 	logger                  logr.Logger
-	hubName                 string
 	valkeyAuditStreamExpiry time.Duration
 }
 
@@ -50,11 +49,10 @@ func (r *ValkeyAdapter) AuditStreamExpiry() time.Duration {
 	return r.valkeyAuditStreamExpiry
 }
 
-func NewValkeyAdapter(client valkey.Client, logger logr.Logger, hubName string, opts ...ValkeyAdapterOption) *ValkeyAdapter {
+func NewValkeyAdapter(client valkey.Client, logger logr.Logger, opts ...ValkeyAdapterOption) *ValkeyAdapter {
 	va := &ValkeyAdapter{
 		client:                  client,
 		logger:                  logger,
-		hubName:                 hubName,
 		valkeyAuditStreamExpiry: 30 * 24 * time.Hour,
 	}
 
@@ -65,21 +63,21 @@ func NewValkeyAdapter(client valkey.Client, logger logr.Logger, hubName string, 
 	return va
 }
 
-func (r *ValkeyAdapter) composeStorageKey(variableStorageKey string) string {
-	return variableKeyPrefix + r.hubName + "/" + variableStorageKey
+func (r *ValkeyAdapter) composeStorageKey(variableStorageKey string, hubName string) string {
+	return variableKeyPrefix + hubName + "/" + variableStorageKey
 }
 
-func (r *ValkeyAdapter) prefixedRefs(refs []string) []string {
+func (r *ValkeyAdapter) prefixedRefs(refs []string, hubName string) []string {
 	out := make([]string, len(refs))
 	for i, ref := range refs {
-		out[i] = r.composeStorageKey(ref)
+		out[i] = r.composeStorageKey(ref, hubName)
 	}
 	return out
 }
 
-func (r *ValkeyAdapter) GetOrCreateMetaPriorityList(ctx context.Context, variableKey string, variableRefs []string) ([]string, bool, error) {
-	key := r.composeStorageKey(variableKey)
-	refs := r.prefixedRefs(variableRefs)
+func (r *ValkeyAdapter) GetOrCreateMetaPriorityList(ctx context.Context, variableKey string, hubName string, variableRefs []string) ([]string, bool, error) {
+	key := r.composeStorageKey(variableKey, hubName)
+	refs := r.prefixedRefs(variableRefs, hubName)
 	list, err := r.client.Do(ctx, r.client.B().Arbitrary("PRIORITYLIST.GETORCREATE").Keys(key).Args(refs...).Build()).AsStrSlice()
 	if err == nil {
 		r.logger.Info(fmt.Sprintf("Data received for %s: %s", key, list))
@@ -93,10 +91,10 @@ func (r *ValkeyAdapter) GetOrCreateMetaPriorityList(ctx context.Context, variabl
 	return nil, false, err
 }
 
-func (r *ValkeyAdapter) GetOrCreateMetaHashSet(ctx context.Context, variableKey string, variableStringKey string, variableSetKey string) (string, bool, error) {
-	key := r.composeStorageKey(variableKey)
-	stringKey := r.composeStorageKey(variableStringKey)
-	setKey := r.composeStorageKey(variableSetKey)
+func (r *ValkeyAdapter) GetOrCreateMetaHashSet(ctx context.Context, variableKey string, hubName string, variableStringKey string, variableSetKey string) (string, bool, error) {
+	key := r.composeStorageKey(variableKey, hubName)
+	stringKey := r.composeStorageKey(variableStringKey, hubName)
+	setKey := r.composeStorageKey(variableSetKey, hubName)
 	value, err := r.client.Do(ctx, r.client.B().Arbitrary("HASHSET.GETORCREATE").Keys(key).Args(stringKey, setKey).Build()).ToString()
 	if err == nil {
 		r.logger.Info(fmt.Sprintf("Data received for %s: %s", key, value))
@@ -110,8 +108,8 @@ func (r *ValkeyAdapter) GetOrCreateMetaHashSet(ctx context.Context, variableKey 
 	return "", false, err
 }
 
-func (r *ValkeyAdapter) GetSetAsStringSlice(ctx context.Context, variableKey string) ([]string, error) {
-	key := r.composeStorageKey(variableKey)
+func (r *ValkeyAdapter) GetSetAsStringSlice(ctx context.Context, variableKey string, hubName string) ([]string, error) {
+	key := r.composeStorageKey(variableKey, hubName)
 	valueAsSlice, err := r.client.Do(ctx, r.client.B().Smembers().Key(key).Build()).AsStrSlice()
 	if err != nil {
 		r.logger.Error(err, "failed to get a Set value from storage", "key", key)
@@ -124,8 +122,8 @@ func (r *ValkeyAdapter) GetSetAsStringSlice(ctx context.Context, variableKey str
 
 // GetString retrieves the string, int and boolean variable.
 // It returns the value, a boolean indicating whether the key was found, and any error encountered.
-func (r *ValkeyAdapter) GetString(ctx context.Context, variableKey string) (string, bool, error) {
-	key := r.composeStorageKey(variableKey)
+func (r *ValkeyAdapter) GetString(ctx context.Context, variableKey string, hubName string) (string, bool, error) {
+	key := r.composeStorageKey(variableKey, hubName)
 	value, err := r.client.Do(ctx, r.client.B().Get().Key(key).Build()).ToString()
 	if err != nil {
 		if valkey.IsValkeyNil(err) {
@@ -139,8 +137,8 @@ func (r *ValkeyAdapter) GetString(ctx context.Context, variableKey string) (stri
 	return value, true, nil
 }
 
-func (r *ValkeyAdapter) GetMapAsString(ctx context.Context, variableKey string) (string, error) {
-	key := r.composeStorageKey(variableKey)
+func (r *ValkeyAdapter) GetMapAsString(ctx context.Context, variableKey string, hubName string) (string, error) {
+	key := r.composeStorageKey(variableKey, hubName)
 	raw, err := r.client.Do(ctx, r.client.B().Hgetall().Key(key).Build()).AsStrMap()
 	if err != nil {
 		r.logger.Error(err, "failed to get Map value from storage", "key", key)
@@ -168,44 +166,44 @@ func (r *ValkeyAdapter) GetMapAsString(ctx context.Context, variableKey string) 
 	return string(yamlData), nil
 }
 
-func (r *ValkeyAdapter) AddElementToSet(variableKey string, value string) valkey.Completed {
-	key := r.composeStorageKey(variableKey)
+func (r *ValkeyAdapter) AddElementToSet(variableKey string, hubName string, value string) valkey.Completed {
+	key := r.composeStorageKey(variableKey, hubName)
 	r.logger.Info("Adding element to set", "variableKey", variableKey, "value", value, "key", key)
 	return r.client.B().Sadd().Key(key).Member(value).Build()
 }
 
-func (r *ValkeyAdapter) RemoveElementFromSet(variableKey string, value string) valkey.Completed {
-	key := r.composeStorageKey(variableKey)
+func (r *ValkeyAdapter) RemoveElementFromSet(variableKey string, hubName string, value string) valkey.Completed {
+	key := r.composeStorageKey(variableKey, hubName)
 	return r.client.B().Srem().Key(key).Member(value).Build()
 }
 
-func (r *ValkeyAdapter) SetString(variableKey string, value string) valkey.Completed {
-	key := r.composeStorageKey(variableKey)
+func (r *ValkeyAdapter) SetString(variableKey string, hubName string, value string) valkey.Completed {
+	key := r.composeStorageKey(variableKey, hubName)
 	return r.client.B().Set().Key(key).Value(value).Build()
 }
 
-func (r *ValkeyAdapter) DeleteString(variableKey string) valkey.Completed {
-	key := r.composeStorageKey(variableKey)
+func (r *ValkeyAdapter) DeleteString(variableKey string, hubName string) valkey.Completed {
+	key := r.composeStorageKey(variableKey, hubName)
 	return r.client.B().Del().Key(key).Build()
 }
 
-func (r *ValkeyAdapter) IntIncrBy(variableKey string, value int64) valkey.Completed {
-	key := r.composeStorageKey(variableKey)
+func (r *ValkeyAdapter) IntIncrBy(variableKey string, hubName string, value int64) valkey.Completed {
+	key := r.composeStorageKey(variableKey, hubName)
 	return r.client.B().Incrby().Key(key).Increment(value).Build()
 }
 
-func (r *ValkeyAdapter) IntDecrBy(variableKey string, value int64) valkey.Completed {
-	key := r.composeStorageKey(variableKey)
+func (r *ValkeyAdapter) IntDecrBy(variableKey string, hubName string, value int64) valkey.Completed {
+	key := r.composeStorageKey(variableKey, hubName)
 	return r.client.B().Decrby().Key(key).Decrement(value).Build()
 }
 
-func (r *ValkeyAdapter) SetMapEntry(variableKey string, field string, value string) valkey.Completed {
-	key := r.composeStorageKey(variableKey)
+func (r *ValkeyAdapter) SetMapEntry(variableKey string, hubName string, field string, value string) valkey.Completed {
+	key := r.composeStorageKey(variableKey, hubName)
 	return r.client.B().Hset().Key(key).FieldValue().FieldValue(field, value).Build()
 }
 
-func (r *ValkeyAdapter) BulkSetMap(variableKey string, values map[string]string) valkey.Completed {
-	key := r.composeStorageKey(variableKey)
+func (r *ValkeyAdapter) BulkSetMap(variableKey string, hubName string, values map[string]string) valkey.Completed {
+	key := r.composeStorageKey(variableKey, hubName)
 	hsetFieldValue := r.client.B().Hset().Key(key).FieldValue()
 	for field, val := range values {
 		hsetFieldValue = hsetFieldValue.FieldValue(field, val)
@@ -213,12 +211,12 @@ func (r *ValkeyAdapter) BulkSetMap(variableKey string, values map[string]string)
 	return hsetFieldValue.Build()
 }
 
-func (r *ValkeyAdapter) RemoveMapEntry(variableKey string, field string) valkey.Completed {
-	key := r.composeStorageKey(variableKey)
+func (r *ValkeyAdapter) RemoveMapEntry(variableKey string, hubName string, field string) valkey.Completed {
+	key := r.composeStorageKey(variableKey, hubName)
 	return r.client.B().Hdel().Key(key).Field(field).Build()
 }
 
-func (r *ValkeyAdapter) DoVariableUpdateAndLog(ctx context.Context, variableUpdate *mdaiv1.VariableUpdate, mdaiHubAction audit.MdaiHubAction, valkeyKey string, mapKey string, value string, intValue int64) (bool, error) {
+func (r *ValkeyAdapter) DoVariableUpdateAndLog(ctx context.Context, variableUpdate *mdaiv1.VariableUpdate, mdaiHubAction audit.MdaiHubAction, valkeyKey string, hubName string, mapKey string, value string, intValue int64) (bool, error) {
 	r.logger.Info(fmt.Sprintf("Performing %s operation", mdaiHubAction.Operation), "variable", valkeyKey, "mdaiHubAction", mdaiHubAction)
 	auditLogCommand := r.makeAuditLogActionCommand(mdaiHubAction)
 
@@ -227,7 +225,7 @@ func (r *ValkeyAdapter) DoVariableUpdateAndLog(ctx context.Context, variableUpda
 		return false, nil
 	}
 
-	variableUpdateCommand := def.BuildVariableCmd(r, valkeyKey, OperationArgs{
+	variableUpdateCommand := def.BuildVariableCmd(r, valkeyKey, hubName, OperationArgs{
 		MapKey:   mapKey,
 		Value:    value,
 		IntValue: intValue, // TODO this is a placeholder for int value
@@ -259,8 +257,8 @@ func (r *ValkeyAdapter) makeAuditLogActionCommand(mdaiHubAction audit.MdaiHubAct
 		Build()
 }
 
-func (r *ValkeyAdapter) DeleteKeysWithPrefixUsingScan(ctx context.Context, keep map[string]struct{}) error {
-	prefix := variableKeyPrefix + r.hubName + "/"
+func (r *ValkeyAdapter) DeleteKeysWithPrefixUsingScan(ctx context.Context, keep map[string]struct{}, hubName string) error {
+	prefix := variableKeyPrefix + hubName + "/"
 	keyPattern := prefix + "*"
 
 	var cursor uint64
@@ -292,61 +290,62 @@ func (r *ValkeyAdapter) DeleteKeysWithPrefixUsingScan(ctx context.Context, keep 
 
 type OperationArgs struct {
 	MapKey   string
+	HubName  string
 	Value    string
 	IntValue int64
 	MapValue map[string]string
 }
 
 type OperationDef struct {
-	BuildVariableCmd func(a *ValkeyAdapter, key string, args OperationArgs) valkey.Completed
+	BuildVariableCmd func(a *ValkeyAdapter, key string, hubName string, args OperationArgs) valkey.Completed
 }
 
 // operationDefs holds the definition for each VariableUpdateOperation.
 var operationDefs = map[mdaiv1.VariableUpdateOperation]OperationDef{
 	VariableUpdateSetAddElement: {
-		BuildVariableCmd: func(a *ValkeyAdapter, key string, args OperationArgs) valkey.Completed {
-			return a.AddElementToSet(key, args.Value)
+		BuildVariableCmd: func(a *ValkeyAdapter, key string, hubName string, args OperationArgs) valkey.Completed {
+			return a.AddElementToSet(key, hubName, args.Value)
 		},
 	},
 	VariableUpdateSetRemoveElement: {
-		BuildVariableCmd: func(a *ValkeyAdapter, key string, args OperationArgs) valkey.Completed {
-			return a.RemoveElementFromSet(key, args.Value)
+		BuildVariableCmd: func(a *ValkeyAdapter, key string, hubName string, args OperationArgs) valkey.Completed {
+			return a.RemoveElementFromSet(key, hubName, args.Value)
 		},
 	},
 	// --- single‐label operations ---
 	VariableUpdateBulkSetKeyValue: {
-		BuildVariableCmd: func(a *ValkeyAdapter, key string, args OperationArgs) valkey.Completed {
-			return a.BulkSetMap(key, args.MapValue)
+		BuildVariableCmd: func(a *ValkeyAdapter, key string, hubName string, args OperationArgs) valkey.Completed {
+			return a.BulkSetMap(key, hubName, args.MapValue)
 		},
 	},
 	VariableUpdateSet: {
-		BuildVariableCmd: func(a *ValkeyAdapter, key string, args OperationArgs) valkey.Completed {
-			return a.SetString(key, args.Value)
+		BuildVariableCmd: func(a *ValkeyAdapter, key string, hubName string, args OperationArgs) valkey.Completed {
+			return a.SetString(key, hubName, args.Value)
 		},
 	},
 	VariableUpdateDelete: {
-		BuildVariableCmd: func(a *ValkeyAdapter, key string, args OperationArgs) valkey.Completed {
-			return a.DeleteString(key)
+		BuildVariableCmd: func(a *ValkeyAdapter, key string, hubName string, args OperationArgs) valkey.Completed {
+			return a.DeleteString(key, hubName)
 		},
 	},
 	VariableUpdateIntIncrBy: {
-		BuildVariableCmd: func(a *ValkeyAdapter, key string, args OperationArgs) valkey.Completed {
-			return a.IntIncrBy(key, args.IntValue)
+		BuildVariableCmd: func(a *ValkeyAdapter, key string, hubName string, args OperationArgs) valkey.Completed {
+			return a.IntIncrBy(key, hubName, args.IntValue)
 		},
 	},
 	VariableUpdateIntDecrBy: {
-		BuildVariableCmd: func(a *ValkeyAdapter, key string, args OperationArgs) valkey.Completed {
-			return a.IntDecrBy(key, args.IntValue)
+		BuildVariableCmd: func(a *ValkeyAdapter, key string, hubName string, args OperationArgs) valkey.Completed {
+			return a.IntDecrBy(key, hubName, args.IntValue)
 		},
 	},
 	VariableUpdateSetMapEntry: {
-		BuildVariableCmd: func(a *ValkeyAdapter, key string, args OperationArgs) valkey.Completed {
-			return a.SetMapEntry(key, args.MapKey, args.Value)
+		BuildVariableCmd: func(a *ValkeyAdapter, key string, hubName string, args OperationArgs) valkey.Completed {
+			return a.SetMapEntry(key, hubName, args.MapKey, args.Value)
 		},
 	},
 	VariableUpdateRemoveMapEntry: {
-		BuildVariableCmd: func(a *ValkeyAdapter, key string, args OperationArgs) valkey.Completed {
-			return a.RemoveMapEntry(key, args.MapKey)
+		BuildVariableCmd: func(a *ValkeyAdapter, key string, hubName string, args OperationArgs) valkey.Completed {
+			return a.RemoveMapEntry(key, hubName, args.MapKey)
 		},
 	},
 }
