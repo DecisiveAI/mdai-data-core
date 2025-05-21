@@ -17,27 +17,24 @@ import (
 type HandlerAdapter struct {
 	client        valkey.Client
 	logger        logr.Logger
-	hubName       string
 	valkeyAdapter *variables.ValkeyAdapter
 }
 
-func NewHandlerAdapter(client valkey.Client, logger logr.Logger, hubName string, opts ...variables.ValkeyAdapterOption) *HandlerAdapter {
-	va := variables.NewValkeyAdapter(client, logger, hubName, opts...)
+func NewHandlerAdapter(client valkey.Client, logger logr.Logger, opts ...variables.ValkeyAdapterOption) *HandlerAdapter {
+	va := variables.NewValkeyAdapter(client, logger, opts...)
 	ha := &HandlerAdapter{
 		client:        client,
 		logger:        logger,
-		hubName:       hubName,
 		valkeyAdapter: va,
 	}
 
 	return ha
 }
 
-func (r *HandlerAdapter) AddElementToSet(ctx context.Context, variableKey string, value string) error {
-	variableUpdateCommand := r.valkeyAdapter.AddElementToSet(variableKey, value)
+func (r *HandlerAdapter) AddElementToSet(ctx context.Context, variableKey string, hubName string, value string) error {
+	variableUpdateCommand := r.valkeyAdapter.AddElementToSet(variableKey, hubName, value)
 
 	auditAction := StoreVariableAction{
-		HubName:     r.hubName,
 		EventId:     time.Now().String(),
 		Operation:   "Add element to set",
 		Target:      variableKey,
@@ -55,10 +52,10 @@ func (r *HandlerAdapter) AddElementToSet(ctx context.Context, variableKey string
 	return r.accumulateErrors(results, variableKey) // TODO we should retry here
 }
 
-func (r *HandlerAdapter) RemoveElementFromSet(ctx context.Context, variableKey string, value string) error {
-	variableUpdateCommand := r.valkeyAdapter.RemoveElementFromSet(variableKey, value)
+func (r *HandlerAdapter) RemoveElementFromSet(ctx context.Context, variableKey string, hubName string, value string) error {
+	variableUpdateCommand := r.valkeyAdapter.RemoveElementFromSet(variableKey, hubName, value)
 	auditAction := StoreVariableAction{
-		HubName:     r.hubName,
+		HubName:     hubName,
 		EventId:     time.Now().String(),
 		Operation:   "Remove element from set",
 		Target:      variableKey,
