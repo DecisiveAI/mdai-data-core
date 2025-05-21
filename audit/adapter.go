@@ -226,6 +226,7 @@ func (c *AuditAdapter) CreateHubAction(value string, variableUpdate *mdaiv1.Vari
 	}
 	return mdaiHubAction
 }
+
 func GetAuditLogTTLMinId(valkeyAuditStreamExpiry time.Duration) string {
 	return strconv.FormatInt(time.Now().Add(-valkeyAuditStreamExpiry).UnixMilli(), 10)
 }

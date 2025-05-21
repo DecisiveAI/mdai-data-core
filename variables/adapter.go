@@ -32,7 +32,6 @@ const (
 )
 
 type ValkeyAdapter struct {
-	ctx     context.Context
 	client                  valkey.Client
 	logger                  logr.Logger
 	hubName                 string
@@ -47,9 +46,12 @@ func WithValkeyAuditStreamExpiry(expiry time.Duration) ValkeyAdapterOption {
 	}
 }
 
-func NewValkeyAdapter(ctx context.Context, client valkey.Client, logger logr.Logger, hubName string, opts ...ValkeyAdapterOption) *ValkeyAdapter {
+func (r *ValkeyAdapter) AuditStreamExpiry() time.Duration {
+	return r.valkeyAuditStreamExpiry
+}
+
+func NewValkeyAdapter(client valkey.Client, logger logr.Logger, hubName string, opts ...ValkeyAdapterOption) *ValkeyAdapter {
 	va := &ValkeyAdapter{
-		ctx:     ctx,
 		client:                  client,
 		logger:                  logger,
 		hubName:                 hubName,
@@ -169,9 +171,7 @@ func (r *ValkeyAdapter) GetMapAsString(ctx context.Context, variableKey string) 
 func (r *ValkeyAdapter) AddElementToSet(variableKey string, value string) valkey.Completed {
 	key := r.composeStorageKey(variableKey)
 	r.logger.Info("Adding element to set", "variableKey", variableKey, "value", value, "key", key)
-	cmd := r.client.B().Sadd().Key(key).Member(value).Build()
-	r.client.Do(r.ctx, cmd)
-	return cmd
+	return r.client.B().Sadd().Key(key).Member(value).Build()
 }
 
 func (r *ValkeyAdapter) RemoveElementFromSet(variableKey string, value string) valkey.Completed {
