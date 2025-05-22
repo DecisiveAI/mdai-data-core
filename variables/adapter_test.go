@@ -2,12 +2,9 @@ package ValkeyAdapter
 
 import (
 	"context"
-	"errors"
 	"testing"
 	"time"
 
-	"github.com/decisiveai/mdai-data-core/audit"
-	mdaiv1 "github.com/decisiveai/mdai-operator/api/v1"
 	"github.com/go-logr/logr"
 	"github.com/stretchr/testify/assert"
 	"github.com/valkey-io/valkey-go"
@@ -97,23 +94,6 @@ func TestGetMapAsString_YAMLConversion(t *testing.T) {
 	assert.Equal(t, expected, got)
 }
 
-func TestGetOperationDef(t *testing.T) {
-	adapter := NewValkeyAdapter(nil, logr.Discard())
-
-	cases := []struct {
-		op   mdaiv1.VariableUpdateOperation
-		want bool
-	}{
-		{VariableUpdateSet, true},
-		{VariableUpdateIntIncrBy, true},
-		{mdaiv1.VariableUpdateOperation("unknown"), false},
-	}
-	for _, c := range cases {
-		_, ok := adapter.GetOperationDef(c.op)
-		assert.Equal(t, c.want, ok, "operation %q", c.op)
-	}
-}
-
 func TestDeleteKeysWithPrefixUsingScan(t *testing.T) {
 	adapter, client, ctx, ctrl := newAdapterWithMock(t)
 	defer ctrl.Finish()
@@ -148,75 +128,6 @@ func TestDeleteKeysWithPrefixUsingScan(t *testing.T) {
 	keep := map[string]struct{}{"keepme": {}}
 	err := adapter.DeleteKeysWithPrefixUsingScan(ctx, keep, "hub")
 	assert.NoError(t, err)
-}
-
-func TestDoVariableUpdateAndLog_Success(t *testing.T) {
-	adapter, client, ctx, ctrl := newAdapterWithMock(t)
-	defer ctrl.Finish()
-
-	vu := &mdaiv1.VariableUpdate{Operation: VariableUpdateSet}
-	action := audit.MdaiHubAction{Operation: string(VariableUpdateSet)}
-
-	client.
-		EXPECT().
-		DoMulti(ctx, gomock.Any(), gomock.Any()).
-		DoAndReturn(func(_ context.Context, cmds ...valkey.Completed) []valkey.ValkeyResult {
-			assert.Len(t, cmds, 2, "variable-update cmd + audit-log cmd")
-			return []valkey.ValkeyResult{
-				vmock.Result(vmock.ValkeyString("OK")),
-				vmock.Result(vmock.ValkeyString("OK")),
-			}
-		})
-
-	ok, err := adapter.DoVariableUpdateAndLog(ctx, vu, action,
-		"foo",
-		"hub",
-		"",
-		"bar",
-		0,
-	)
-
-	assert.True(t, ok)
-	assert.NoError(t, err)
-}
-
-func TestDoVariableUpdateAndLog_UnknownOp_NoCall(t *testing.T) {
-	adapter, _, ctx, ctrl := newAdapterWithMock(t)
-	defer ctrl.Finish()
-
-	vu := &mdaiv1.VariableUpdate{Operation: mdaiv1.VariableUpdateOperation("bogus")}
-	action := audit.MdaiHubAction{Operation: "bogus"}
-
-	ok, err := adapter.DoVariableUpdateAndLog(ctx, vu, action,
-		"foo", "hub", "", "", 0)
-
-	assert.False(t, ok)
-	assert.NoError(t, err)
-}
-
-func TestDoVariableUpdateAndLog_ErrorAggregated(t *testing.T) {
-	adapter, client, ctx, ctrl := newAdapterWithMock(t)
-	defer ctrl.Finish()
-
-	vu := &mdaiv1.VariableUpdate{Operation: VariableUpdateSet}
-	action := audit.MdaiHubAction{Operation: string(VariableUpdateSet)}
-
-	client.
-		EXPECT().
-		DoMulti(ctx, gomock.Any(), gomock.Any()).
-		DoAndReturn(func(_ context.Context, cmds ...valkey.Completed) []valkey.ValkeyResult {
-			return []valkey.ValkeyResult{
-				vmock.Result(vmock.ValkeyString("OK")),
-				vmock.ErrorResult(errors.New("boom")),
-			}
-		})
-
-	ok, err := adapter.DoVariableUpdateAndLog(ctx, vu, action,
-		"foo", "mdai-hub", "", "bar", 0)
-
-	assert.True(t, ok)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "boom")
 }
 
 func TestGetOrCreateMetaPriorityList(t *testing.T) {

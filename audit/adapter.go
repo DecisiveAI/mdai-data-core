@@ -8,7 +8,6 @@ import (
 	"strings"
 	"time"
 
-	mdaiv1 "github.com/decisiveai/mdai-operator/api/v1"
 	"github.com/go-logr/logr"
 	"github.com/prometheus/alertmanager/template"
 	"github.com/valkey-io/valkey-go"
@@ -211,20 +210,6 @@ func (c *AuditAdapter) CreateRestartEvent(mdaiCRName string, envMap map[string]s
 		mdaiHubEvent[key] = value
 	}
 	return mdaiHubEvent
-}
-
-func (c *AuditAdapter) CreateHubAction(value string, variableUpdate *mdaiv1.VariableUpdate, valkeyKey string, alert template.Alert) MdaiHubAction {
-	mdaiHubAction := MdaiHubAction{
-		HubName:     alert.Annotations[HubName],
-		Event:       alert.Annotations[AlertName],
-		Status:      alert.Status,
-		Type:        VariableUpdated,
-		Operation:   string(variableUpdate.Operation),
-		Target:      valkeyKey,
-		VariableRef: variableUpdate.VariableRef,
-		Variable:    value,
-	}
-	return mdaiHubAction
 }
 
 func GetAuditLogTTLMinId(valkeyAuditStreamExpiry time.Duration) string {
