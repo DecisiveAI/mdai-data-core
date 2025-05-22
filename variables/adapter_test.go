@@ -7,6 +7,7 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/valkey-io/valkey-go"
 	vmock "github.com/valkey-io/valkey-go/mock"
 	"go.uber.org/mock/gomock"
@@ -14,6 +15,7 @@ import (
 )
 
 func newAdapterWithMock(t *testing.T) (*ValkeyAdapter, *vmock.Client, context.Context, *gomock.Controller) {
+	t.Helper()
 	ctrl := gomock.NewController(t)
 	client := vmock.NewClient(ctrl)
 	adapter := NewValkeyAdapter(client, logr.Discard())
@@ -36,7 +38,7 @@ func TestGetString(t *testing.T) {
 		Return(vmock.Result(vmock.ValkeyString("bar")))
 	val, found, err := adapter.GetString(ctx, "foo", "hub")
 
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.True(t, found)
 	assert.Equal(t, "bar", val)
 
@@ -45,7 +47,7 @@ func TestGetString(t *testing.T) {
 		Return(vmock.Result(vmock.ValkeyNil()))
 	_, found, err = adapter.GetString(ctx, "foo", "hub")
 
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.False(t, found)
 }
 
@@ -62,7 +64,7 @@ func TestGetSetAsStringSlice(t *testing.T) {
 		))
 
 	got, err := adapter.GetSetAsStringSlice(ctx, "myset", "hub")
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.ElementsMatch(t, []string{"first", "second"}, got)
 }
 
@@ -81,9 +83,9 @@ func TestGetMapAsString_YAMLConversion(t *testing.T) {
 		})))
 
 	out, err := adapter.GetMapAsString(ctx, "myhash", "hub")
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	var got map[string]any
-	assert.NoError(t, yaml.Unmarshal([]byte(out), &got))
+	require.NoError(t, yaml.Unmarshal([]byte(out), &got))
 
 	expected := map[string]any{
 		"a": 1,     // int
@@ -98,7 +100,7 @@ func TestDeleteKeysWithPrefixUsingScan(t *testing.T) {
 	adapter, client, ctx, ctrl := newAdapterWithMock(t)
 	defer ctrl.Finish()
 
-	prefix := "variable/hub/"
+	const prefix = "variable/hub/"
 	scanPattern := prefix + "*"
 	keyToDelete := prefix + "killme"
 	keyToKeep := prefix + "keepme"
@@ -127,7 +129,7 @@ func TestDeleteKeysWithPrefixUsingScan(t *testing.T) {
 
 	keep := map[string]struct{}{"keepme": {}}
 	err := adapter.DeleteKeysWithPrefixUsingScan(ctx, keep, "hub")
-	assert.NoError(t, err)
+	require.NoError(t, err)
 }
 
 func TestGetOrCreateMetaPriorityList(t *testing.T) {
@@ -153,7 +155,7 @@ func TestGetOrCreateMetaPriorityList(t *testing.T) {
 		))
 
 	list, found, err := adapter.GetOrCreateMetaPriorityList(ctx, varKey, "hub", refs)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.True(t, found)
 	assert.Equal(t, []string{r1, r2}, list)
 
@@ -165,7 +167,7 @@ func TestGetOrCreateMetaPriorityList(t *testing.T) {
 		Return(vmock.Result(vmock.ValkeyNil()))
 
 	list, found, err = adapter.GetOrCreateMetaPriorityList(ctx, varKey, "hub", refs)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.False(t, found)
 	assert.Nil(t, list)
 }
@@ -191,7 +193,7 @@ func TestGetOrCreateMetaHashSet(t *testing.T) {
 		Return(vmock.Result(vmock.ValkeyBlobString(wantVal)))
 
 	got, found, err := adapter.GetOrCreateMetaHashSet(ctx, varKey, "hub", strKeyInput, setKeyInput)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.True(t, found)
 	assert.Equal(t, wantVal, got)
 
@@ -203,7 +205,7 @@ func TestGetOrCreateMetaHashSet(t *testing.T) {
 		Return(vmock.Result(vmock.ValkeyNil()))
 
 	got, found, err = adapter.GetOrCreateMetaHashSet(ctx, varKey, "hub", strKeyInput, setKeyInput)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.False(t, found)
 	assert.Empty(t, got)
 }
