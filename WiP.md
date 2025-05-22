@@ -10,4 +10,7 @@
 ## TODOs:
 1. Add debug logs, cmd execute to remaining methods
 2. Add Audit logs to remaining methods
-3. Version?
+4. Review audit adapter, some logic could be outdated
+5. Update tests to cover handlers package
+6. Merge to main and push a version tag
+7. Update all dependent projects with new tag

@@ -12,23 +12,12 @@ import (
 	"github.com/go-logr/logr"
 
 	"github.com/decisiveai/mdai-data-core/audit"
-	mdaiv1 "github.com/decisiveai/mdai-operator/api/v1"
 	"github.com/valkey-io/valkey-go"
 	"gopkg.in/yaml.v3"
 )
 
 const (
 	variableKeyPrefix = "variable/"
-
-	VariableUpdateSetAddElement    mdaiv1.VariableUpdateOperation = "mdai/add_element"
-	VariableUpdateSetRemoveElement mdaiv1.VariableUpdateOperation = "mdai/remove_element"
-	VariableUpdateSet              mdaiv1.VariableUpdateOperation = "mdai/set"
-	VariableUpdateDelete           mdaiv1.VariableUpdateOperation = "mdai/delete"
-	VariableUpdateIntIncrBy        mdaiv1.VariableUpdateOperation = "mdai/incr_by"
-	VariableUpdateIntDecrBy        mdaiv1.VariableUpdateOperation = "mdai/decr_by"
-	VariableUpdateSetMapEntry      mdaiv1.VariableUpdateOperation = "mdai/map_set_entry"
-	VariableUpdateRemoveMapEntry   mdaiv1.VariableUpdateOperation = "mdai/map_remove_entry"
-	VariableUpdateBulkSetKeyValue  mdaiv1.VariableUpdateOperation = "mdai/bulk_set_key_value"
 )
 
 type ValkeyAdapter struct {
@@ -216,28 +205,6 @@ func (r *ValkeyAdapter) RemoveMapEntry(variableKey string, hubName string, field
 	return r.client.B().Hdel().Key(key).Field(field).Build()
 }
 
-func (r *ValkeyAdapter) DoVariableUpdateAndLog(ctx context.Context, variableUpdate *mdaiv1.VariableUpdate, mdaiHubAction audit.MdaiHubAction, valkeyKey string, hubName string, mapKey string, value string, intValue int64) (bool, error) {
-	r.logger.Info(fmt.Sprintf("Performing %s operation", mdaiHubAction.Operation), "variable", valkeyKey, "mdaiHubAction", mdaiHubAction)
-	auditLogCommand := r.makeAuditLogActionCommand(mdaiHubAction)
-
-	def, found := r.GetOperationDef(variableUpdate.Operation)
-	if !found {
-		return false, nil
-	}
-
-	variableUpdateCommand := def.BuildVariableCmd(r, valkeyKey, hubName, OperationArgs{
-		MapKey:   mapKey,
-		Value:    value,
-		IntValue: intValue, // TODO this is a placeholder for int value
-	})
-	results := r.client.DoMulti(ctx,
-		variableUpdateCommand,
-		auditLogCommand,
-	)
-	valkeyMultiErr := r.accumulateValkeyErrors(results, valkeyKey) // TODO we should probably retry here
-	return true, valkeyMultiErr
-}
-
 func (r *ValkeyAdapter) accumulateValkeyErrors(results []valkey.ValkeyResult, key string) error {
 	var errs []error
 	for _, result := range results {
@@ -294,63 +261,4 @@ type OperationArgs struct {
 	Value    string
 	IntValue int64
 	MapValue map[string]string
-}
-
-type OperationDef struct {
-	BuildVariableCmd func(a *ValkeyAdapter, key string, hubName string, args OperationArgs) valkey.Completed
-}
-
-// operationDefs holds the definition for each VariableUpdateOperation.
-var operationDefs = map[mdaiv1.VariableUpdateOperation]OperationDef{
-	VariableUpdateSetAddElement: {
-		BuildVariableCmd: func(a *ValkeyAdapter, key string, hubName string, args OperationArgs) valkey.Completed {
-			return a.AddElementToSet(key, hubName, args.Value)
-		},
-	},
-	VariableUpdateSetRemoveElement: {
-		BuildVariableCmd: func(a *ValkeyAdapter, key string, hubName string, args OperationArgs) valkey.Completed {
-			return a.RemoveElementFromSet(key, hubName, args.Value)
-		},
-	},
-	// --- single‐label operations ---
-	VariableUpdateBulkSetKeyValue: {
-		BuildVariableCmd: func(a *ValkeyAdapter, key string, hubName string, args OperationArgs) valkey.Completed {
-			return a.BulkSetMap(key, hubName, args.MapValue)
-		},
-	},
-	VariableUpdateSet: {
-		BuildVariableCmd: func(a *ValkeyAdapter, key string, hubName string, args OperationArgs) valkey.Completed {
-			return a.SetString(key, hubName, args.Value)
-		},
-	},
-	VariableUpdateDelete: {
-		BuildVariableCmd: func(a *ValkeyAdapter, key string, hubName string, args OperationArgs) valkey.Completed {
-			return a.DeleteString(key, hubName)
-		},
-	},
-	VariableUpdateIntIncrBy: {
-		BuildVariableCmd: func(a *ValkeyAdapter, key string, hubName string, args OperationArgs) valkey.Completed {
-			return a.IntIncrBy(key, hubName, args.IntValue)
-		},
-	},
-	VariableUpdateIntDecrBy: {
-		BuildVariableCmd: func(a *ValkeyAdapter, key string, hubName string, args OperationArgs) valkey.Completed {
-			return a.IntDecrBy(key, hubName, args.IntValue)
-		},
-	},
-	VariableUpdateSetMapEntry: {
-		BuildVariableCmd: func(a *ValkeyAdapter, key string, hubName string, args OperationArgs) valkey.Completed {
-			return a.SetMapEntry(key, hubName, args.MapKey, args.Value)
-		},
-	},
-	VariableUpdateRemoveMapEntry: {
-		BuildVariableCmd: func(a *ValkeyAdapter, key string, hubName string, args OperationArgs) valkey.Completed {
-			return a.RemoveMapEntry(key, hubName, args.MapKey)
-		},
-	},
-}
-
-func (r *ValkeyAdapter) GetOperationDef(operation mdaiv1.VariableUpdateOperation) (OperationDef, bool) {
-	def, found := operationDefs[operation]
-	return def, found
 }
