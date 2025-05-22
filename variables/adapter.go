@@ -2,7 +2,6 @@ package ValkeyAdapter
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	"strconv"
@@ -11,7 +10,6 @@ import (
 
 	"github.com/go-logr/logr"
 
-	"github.com/decisiveai/mdai-data-core/audit"
 	"github.com/valkey-io/valkey-go"
 	"gopkg.in/yaml.v3"
 )
@@ -203,25 +201,6 @@ func (r *ValkeyAdapter) BulkSetMap(variableKey string, hubName string, values ma
 func (r *ValkeyAdapter) RemoveMapEntry(variableKey string, hubName string, field string) valkey.Completed {
 	key := r.composeStorageKey(variableKey, hubName)
 	return r.client.B().Hdel().Key(key).Field(field).Build()
-}
-
-func (r *ValkeyAdapter) accumulateValkeyErrors(results []valkey.ValkeyResult, key string) error {
-	var errs []error
-	for _, result := range results {
-		if err := result.Error(); err != nil {
-			wrapped := fmt.Errorf("operation failed on key %s: %w", key, err)
-			r.logger.Error(wrapped, "Valkey error")
-			errs = append(errs, wrapped)
-		}
-	}
-	return errors.Join(errs...)
-}
-
-func (r *ValkeyAdapter) makeAuditLogActionCommand(mdaiHubAction audit.MdaiHubAction) valkey.Completed {
-	return r.client.B().Xadd().Key(audit.MdaiHubEventHistoryStreamName).Minid().
-		Threshold(audit.GetAuditLogTTLMinId(r.valkeyAuditStreamExpiry)).
-		Id("*").FieldValue().FieldValueIter(mdaiHubAction.ToSequence()).
-		Build()
 }
 
 func (r *ValkeyAdapter) DeleteKeysWithPrefixUsingScan(ctx context.Context, keep map[string]struct{}, hubName string) error {
