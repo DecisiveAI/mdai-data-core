@@ -2,14 +2,13 @@ package audit
 
 import (
 	"context"
-	"encoding/json"
-	"errors"
-	"fmt"
 	"iter"
 	"regexp"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/go-logr/logr"
 
 	mdaiv1 "github.com/decisiveai/mdai-operator/api/v1"
 	"github.com/prometheus/alertmanager/template"
