@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"iter"
-	"strings"
 	"time"
 
 	"github.com/decisiveai/mdai-data-core/audit"
@@ -74,17 +73,13 @@ func (r *HandlerAdapter) RemoveElementFromSet(ctx context.Context, variableKey s
 }
 
 func (r *HandlerAdapter) accumulateErrors(results []valkey.ValkeyResult, key string) error {
-	var errs []string
+	var errs []error
 	for _, result := range results {
-		if result.Error() != nil {
-			errs = append(errs, fmt.Sprintf("operation failed on key %s: %s", key, result.Error()))
+		if err := result.Error(); err != nil {
+			errs = append(errs, fmt.Errorf("operation failed on key %s: %w", key, err))
 		}
 	}
-	if len(errs) > 0 {
-		return errors.New(strings.Join(errs, "; "))
-	}
-
-	return nil
+	return errors.Join(errs...)
 }
 
 func (r *HandlerAdapter) makeVariableAuditLogActionCommand(action StoreVariableAction) valkey.Completed {
