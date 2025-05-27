@@ -110,7 +110,7 @@ func TestGetMap(t *testing.T) {
 			"c": vmock.ValkeyBlobString("3.14"),
 		})))
 
-	got, err := adapter.GetMap(ctx, "hub", "myhash")
+	got, err := adapter.GetMap(ctx, "myhash", "hub")
 	assert.NoError(t, err)
 
 	expected := map[string]string{

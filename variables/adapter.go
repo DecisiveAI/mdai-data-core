@@ -153,7 +153,7 @@ func (r *ValkeyAdapter) GetMapAsString(ctx context.Context, variableKey string, 
 	return string(yamlData), nil
 }
 
-func (r *ValkeyAdapter) GetMap(ctx context.Context, hubName string, variableKey string) (map[string]string, error) {
+func (r *ValkeyAdapter) GetMap(ctx context.Context, variableKey string, hubName string) (map[string]string, error) {
 	key := r.composeStorageKey(variableKey, hubName)
 	raw, err := r.client.Do(ctx, r.client.B().Hgetall().Key(key).Build()).AsStrMap()
 	if err != nil {
