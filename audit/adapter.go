@@ -2,18 +2,14 @@ package audit
 
 import (
 	"context"
-	"encoding/json"
 	"iter"
-	"net/http"
 	"regexp"
 	"strconv"
 	"strings"
 	"time"
 
-	mdaiv1 "github.com/decisiveai/mdai-operator/api/v1"
 	"github.com/go-logr/logr"
 	"github.com/prometheus/alertmanager/template"
-
 	"github.com/valkey-io/valkey-go"
 )
 
@@ -53,47 +49,31 @@ func NewAuditAdapter(
 	}
 }
 
-func (c *AuditAdapter) HandleEventsGet(ctx context.Context) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		result := c.valkeyClient.Do(ctx, c.valkeyClient.B().Xrevrange().Key(MdaiHubEventHistoryStreamName).End("+").Start("-").Build())
-		if err := result.Error(); err != nil {
-			c.logger.Error(err, "valkey error")
-			http.Error(w, "Unable to fetch history from Valkey", http.StatusInternalServerError)
-			return
-		}
+func (c *AuditAdapter) HandleEventsGet(ctx context.Context) ([]map[string]any, error) {
+	result := c.valkeyClient.Do(ctx, c.valkeyClient.B().Xrevrange().Key(MdaiHubEventHistoryStreamName).End("+").Start("-").Build())
+	if err := result.Error(); err != nil {
+		return nil, err
+	}
 
-		resultList, err := result.ToArray()
+	resultList, err := result.ToArray()
+	if err != nil {
+
+		return nil, err
+	}
+
+	entries := make([]map[string]any, 0)
+	for _, entry := range resultList {
+		entryMap, err := entry.AsXRangeEntry()
 		if err != nil {
-			c.logger.Error(err, "failed to get valkey variable as map")
-			http.Error(w, "Unable to fetch history from Valkey", http.StatusInternalServerError)
-			return
+			c.logger.Error(err, "failed to convert entry to map")
+			continue
 		}
 
-		entries := make([]map[string]any, 0)
-		for _, entry := range resultList {
-			entryMap, err := entry.AsXRangeEntry()
-			if err != nil {
-				c.logger.Error(err, "failed to convert entry to map")
-				continue
-			}
-
-			if processedEntry := processEntry(entryMap); processedEntry != nil {
-				entries = append(entries, processedEntry)
-			}
-		}
-
-		resultMapJson, err := json.Marshal(entries)
-		if err != nil {
-			c.logger.Error(err, "failed to marshal events map to json")
-			http.Error(w, "Unable to fetch history from Valkey", http.StatusInternalServerError)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		if _, err := w.Write(resultMapJson); err != nil {
-			c.logger.Error(err, "Failed to write response body (y tho)")
+		if processedEntry := processEntry(entryMap); processedEntry != nil {
+			entries = append(entries, processedEntry)
 		}
 	}
+	return entries, nil
 }
 
 func processEntry(entryMap valkey.XRangeEntry) map[string]any {
@@ -232,19 +212,6 @@ func (c *AuditAdapter) CreateRestartEvent(mdaiCRName string, envMap map[string]s
 	return mdaiHubEvent
 }
 
-func (c *AuditAdapter) CreateHubAction(value string, variableUpdate *mdaiv1.VariableUpdate, valkeyKey string, alert template.Alert) MdaiHubAction {
-	mdaiHubAction := MdaiHubAction{
-		HubName:     alert.Annotations[HubName],
-		Event:       alert.Annotations[AlertName],
-		Status:      alert.Status,
-		Type:        VariableUpdated,
-		Operation:   string(variableUpdate.Operation),
-		Target:      valkeyKey,
-		VariableRef: variableUpdate.VariableRef,
-		Variable:    value,
-	}
-	return mdaiHubAction
-}
 func GetAuditLogTTLMinId(valkeyAuditStreamExpiry time.Duration) string {
 	return strconv.FormatInt(time.Now().Add(-valkeyAuditStreamExpiry).UnixMilli(), 10)
 }

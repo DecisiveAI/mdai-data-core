@@ -2,12 +2,9 @@ package ValkeyAdapter
 
 import (
 	"context"
-	"errors"
 	"testing"
 	"time"
 
-	"github.com/decisiveai/mdai-data-core/audit"
-	mdaiv1 "github.com/decisiveai/mdai-operator/api/v1"
 	"github.com/go-logr/logr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -21,13 +18,13 @@ func newAdapterWithMock(t *testing.T) (*ValkeyAdapter, *vmock.Client, context.Co
 	t.Helper()
 	ctrl := gomock.NewController(t)
 	client := vmock.NewClient(ctrl)
-	adapter := NewValkeyAdapter(client, logr.Discard(), "hub")
+	adapter := NewValkeyAdapter(client, logr.Discard())
 	return adapter, client, context.Background(), ctrl
 }
 
 func TestComposeStorageKey(t *testing.T) {
-	adapter := NewValkeyAdapter(nil, logr.Discard(), "hub-1")
-	assert.Equal(t, "variable/hub-1/myvar", adapter.composeStorageKey("myvar"))
+	adapter := NewValkeyAdapter(nil, logr.Discard())
+	assert.Equal(t, "variable/hub-1/myvar", adapter.composeStorageKey("myvar", "hub-1"))
 }
 
 func TestGetString(t *testing.T) {
@@ -39,7 +36,7 @@ func TestGetString(t *testing.T) {
 	client.EXPECT().
 		Do(ctx, vmock.Match("GET", key)).
 		Return(vmock.Result(vmock.ValkeyString("bar")))
-	val, found, err := adapter.GetString(ctx, "foo")
+	val, found, err := adapter.GetString(ctx, "foo", "hub")
 
 	require.NoError(t, err)
 	assert.True(t, found)
@@ -48,7 +45,7 @@ func TestGetString(t *testing.T) {
 	client.EXPECT().
 		Do(ctx, vmock.Match("GET", key)).
 		Return(vmock.Result(vmock.ValkeyNil()))
-	_, found, err = adapter.GetString(ctx, "foo")
+	_, found, err = adapter.GetString(ctx, "foo", "hub")
 
 	require.NoError(t, err)
 	assert.False(t, found)
@@ -66,7 +63,7 @@ func TestGetSetAsStringSlice(t *testing.T) {
 			vmock.ValkeyArray(vmock.ValkeyBlobString("first"), vmock.ValkeyBlobString("second")),
 		))
 
-	got, err := adapter.GetSetAsStringSlice(ctx, "myset")
+	got, err := adapter.GetSetAsStringSlice(ctx, "myset", "hub")
 	require.NoError(t, err)
 	assert.ElementsMatch(t, []string{"first", "second"}, got)
 }
@@ -85,7 +82,7 @@ func TestGetMapAsString_YAMLConversion(t *testing.T) {
 			"c": vmock.ValkeyBlobString("3.14"),
 		})))
 
-	out, err := adapter.GetMapAsString(ctx, "myhash")
+	out, err := adapter.GetMapAsString(ctx, "myhash", "hub")
 	require.NoError(t, err)
 	var got map[string]any
 	require.NoError(t, yaml.Unmarshal([]byte(out), &got))
@@ -97,23 +94,6 @@ func TestGetMapAsString_YAMLConversion(t *testing.T) {
 	}
 
 	assert.Equal(t, expected, got)
-}
-
-func TestGetOperationDef(t *testing.T) {
-	adapter := NewValkeyAdapter(nil, logr.Discard(), "hub")
-
-	cases := []struct {
-		op   mdaiv1.VariableUpdateOperation
-		want bool
-	}{
-		{VariableUpdateSet, true},
-		{VariableUpdateIntIncrBy, true},
-		{mdaiv1.VariableUpdateOperation("unknown"), false},
-	}
-	for _, c := range cases {
-		_, ok := adapter.GetOperationDef(c.op)
-		assert.Equal(t, c.want, ok, "operation %q", c.op)
-	}
 }
 
 func TestDeleteKeysWithPrefixUsingScan(t *testing.T) {
@@ -148,76 +128,8 @@ func TestDeleteKeysWithPrefixUsingScan(t *testing.T) {
 	)
 
 	keep := map[string]struct{}{"keepme": {}}
-	err := adapter.DeleteKeysWithPrefixUsingScan(ctx, keep)
+	err := adapter.DeleteKeysWithPrefixUsingScan(ctx, keep, "hub")
 	require.NoError(t, err)
-}
-
-func TestDoVariableUpdateAndLog_Success(t *testing.T) {
-	adapter, client, ctx, ctrl := newAdapterWithMock(t)
-	defer ctrl.Finish()
-
-	vu := &mdaiv1.VariableUpdate{Operation: VariableUpdateSet}
-	action := audit.MdaiHubAction{Operation: string(VariableUpdateSet)}
-
-	client.
-		EXPECT().
-		DoMulti(ctx, gomock.Any(), gomock.Any()).
-		DoAndReturn(func(_ context.Context, cmds ...valkey.Completed) []valkey.ValkeyResult {
-			assert.Len(t, cmds, 2, "variable-update cmd + audit-log cmd")
-			return []valkey.ValkeyResult{
-				vmock.Result(vmock.ValkeyString("OK")),
-				vmock.Result(vmock.ValkeyString("OK")),
-			}
-		})
-
-	ok, err := adapter.DoVariableUpdateAndLog(ctx, vu, action,
-		"foo",
-		"",
-		"bar",
-		0,
-	)
-
-	assert.True(t, ok)
-	require.NoError(t, err)
-}
-
-func TestDoVariableUpdateAndLog_UnknownOp_NoCall(t *testing.T) {
-	adapter, _, ctx, ctrl := newAdapterWithMock(t)
-	defer ctrl.Finish()
-
-	vu := &mdaiv1.VariableUpdate{Operation: mdaiv1.VariableUpdateOperation("bogus")}
-	action := audit.MdaiHubAction{Operation: "bogus"}
-
-	ok, err := adapter.DoVariableUpdateAndLog(ctx, vu, action,
-		"foo", "", "", 0)
-
-	assert.False(t, ok)
-	require.NoError(t, err)
-}
-
-func TestDoVariableUpdateAndLog_ErrorAggregated(t *testing.T) {
-	adapter, client, ctx, ctrl := newAdapterWithMock(t)
-	defer ctrl.Finish()
-
-	vu := &mdaiv1.VariableUpdate{Operation: VariableUpdateSet}
-	action := audit.MdaiHubAction{Operation: string(VariableUpdateSet)}
-
-	client.
-		EXPECT().
-		DoMulti(ctx, gomock.Any(), gomock.Any()).
-		DoAndReturn(func(_ context.Context, cmds ...valkey.Completed) []valkey.ValkeyResult {
-			return []valkey.ValkeyResult{
-				vmock.Result(vmock.ValkeyString("OK")),
-				vmock.ErrorResult(errors.New("boom")),
-			}
-		})
-
-	ok, err := adapter.DoVariableUpdateAndLog(ctx, vu, action,
-		"foo", "", "bar", 0)
-
-	assert.True(t, ok)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "boom")
 }
 
 func TestGetOrCreateMetaPriorityList(t *testing.T) {
@@ -242,7 +154,7 @@ func TestGetOrCreateMetaPriorityList(t *testing.T) {
 			),
 		))
 
-	list, found, err := adapter.GetOrCreateMetaPriorityList(ctx, varKey, refs)
+	list, found, err := adapter.GetOrCreateMetaPriorityList(ctx, varKey, "hub", refs)
 	require.NoError(t, err)
 	assert.True(t, found)
 	assert.Equal(t, []string{r1, r2}, list)
@@ -254,7 +166,7 @@ func TestGetOrCreateMetaPriorityList(t *testing.T) {
 		).
 		Return(vmock.Result(vmock.ValkeyNil()))
 
-	list, found, err = adapter.GetOrCreateMetaPriorityList(ctx, varKey, refs)
+	list, found, err = adapter.GetOrCreateMetaPriorityList(ctx, varKey, "hub", refs)
 	require.NoError(t, err)
 	assert.False(t, found)
 	assert.Nil(t, list)
@@ -280,7 +192,7 @@ func TestGetOrCreateMetaHashSet(t *testing.T) {
 		).
 		Return(vmock.Result(vmock.ValkeyBlobString(wantVal)))
 
-	got, found, err := adapter.GetOrCreateMetaHashSet(ctx, varKey, strKeyInput, setKeyInput)
+	got, found, err := adapter.GetOrCreateMetaHashSet(ctx, varKey, "hub", strKeyInput, setKeyInput)
 	require.NoError(t, err)
 	assert.True(t, found)
 	assert.Equal(t, wantVal, got)
@@ -292,7 +204,7 @@ func TestGetOrCreateMetaHashSet(t *testing.T) {
 		).
 		Return(vmock.Result(vmock.ValkeyNil()))
 
-	got, found, err = adapter.GetOrCreateMetaHashSet(ctx, varKey, strKeyInput, setKeyInput)
+	got, found, err = adapter.GetOrCreateMetaHashSet(ctx, varKey, "hub", strKeyInput, setKeyInput)
 	require.NoError(t, err)
 	assert.False(t, found)
 	assert.Empty(t, got)
@@ -301,11 +213,11 @@ func TestGetOrCreateMetaHashSet(t *testing.T) {
 func TestWithValkeyAuditStreamExpiryOption(t *testing.T) {
 	defaultTTL := 30 * 24 * time.Hour
 
-	a1 := NewValkeyAdapter(nil, logr.Discard(), "hub")
+	a1 := NewValkeyAdapter(nil, logr.Discard())
 	assert.Equal(t, defaultTTL, a1.valkeyAuditStreamExpiry)
 
 	customTTL := 12 * time.Hour
-	a2 := NewValkeyAdapter(nil, logr.Discard(), "hub",
+	a2 := NewValkeyAdapter(nil, logr.Discard(),
 		WithValkeyAuditStreamExpiry(customTTL),
 	)
 	assert.Equal(t, customTTL, a2.valkeyAuditStreamExpiry)
