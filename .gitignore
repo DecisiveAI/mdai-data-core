@@ -26,3 +26,5 @@ go.work.sum
 /.idea/mdai-data-core.iml
 /.idea/modules.xml
 /.idea/vcs.xml
+
+.DS_Store
