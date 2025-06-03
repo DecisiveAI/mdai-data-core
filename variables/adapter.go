@@ -153,6 +153,17 @@ func (r *ValkeyAdapter) GetMapAsString(ctx context.Context, variableKey string, 
 	return string(yamlData), nil
 }
 
+func (r *ValkeyAdapter) GetMap(ctx context.Context, variableKey string, hubName string) (map[string]string, error) {
+	key := r.composeStorageKey(variableKey, hubName)
+	raw, err := r.client.Do(ctx, r.client.B().Hgetall().Key(key).Build()).AsStrMap()
+	if err != nil {
+		r.logger.Error(err, "failed to get Map value from storage", "key", key)
+		return nil, err
+	}
+
+	return raw, nil
+}
+
 func (r *ValkeyAdapter) AddElementToSet(variableKey string, hubName string, value string) valkey.Completed {
 	key := r.composeStorageKey(variableKey, hubName)
 	r.logger.Info("Adding element to set", "variableKey", variableKey, "value", value, "key", key)
