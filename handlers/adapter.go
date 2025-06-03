@@ -115,6 +115,27 @@ func (r *HandlerAdapter) RemoveElementFromMap(ctx context.Context, variableKey s
 	return r.accumulateErrors(results, variableKey) // TODO we should retry here
 }
 
+func (r *HandlerAdapter) SetStringValue(ctx context.Context, variableKey string, hubName string, value string) error {
+	variableUpdateCommand := r.valkeyAdapter.SetString(variableKey, hubName, value)
+	auditAction := StoreVariableAction{
+		HubName:     hubName,
+		EventId:     time.Now().String(),
+		Operation:   "Set string value",
+		Target:      variableKey,
+		VariableRef: value,
+		Variable:    value,
+	}
+	auditLogCommand := r.makeVariableAuditLogActionCommand(auditAction)
+
+	results := r.client.DoMulti(
+		ctx,
+		variableUpdateCommand,
+		auditLogCommand,
+	)
+
+	return r.accumulateErrors(results, variableKey) // TODO we should retry here
+}
+
 func (r *HandlerAdapter) accumulateErrors(results []valkey.ValkeyResult, key string) error {
 	var errs []string
 	for _, result := range results {
