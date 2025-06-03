@@ -77,6 +77,7 @@ func (r *HandlerAdapter) AddSetMapElement(ctx context.Context, variableKey strin
 	variableUpdateCommand := r.valkeyAdapter.SetMapEntry(variableKey, hubName, field, value)
 
 	auditAction := StoreVariableAction{
+		HubName:     hubName,
 		EventId:     time.Now().String(),
 		Operation:   "Set map entry",
 		Target:      variableKey,
