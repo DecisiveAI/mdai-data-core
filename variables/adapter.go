@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/go-logr/logr"
+	"go.uber.org/zap"
 
 	"github.com/valkey-io/valkey-go"
 	"gopkg.in/yaml.v3"
@@ -20,7 +20,7 @@ const (
 
 type ValkeyAdapter struct {
 	client                  valkey.Client
-	logger                  logr.Logger
+	logger                  *zap.Logger
 	valkeyAuditStreamExpiry time.Duration
 }
 
@@ -36,7 +36,7 @@ func (r *ValkeyAdapter) AuditStreamExpiry() time.Duration {
 	return r.valkeyAuditStreamExpiry
 }
 
-func NewValkeyAdapter(client valkey.Client, logger logr.Logger, opts ...ValkeyAdapterOption) *ValkeyAdapter {
+func NewValkeyAdapter(client valkey.Client, logger *zap.Logger, opts ...ValkeyAdapterOption) *ValkeyAdapter {
 	va := &ValkeyAdapter{
 		client:                  client,
 		logger:                  logger,
@@ -72,7 +72,7 @@ func (r *ValkeyAdapter) GetOrCreateMetaPriorityList(ctx context.Context, variabl
 	}
 
 	if valkey.IsValkeyNil(err) {
-		r.logger.Info("No value found for references", "key", key)
+		r.logger.Info("No value found for references", zap.String("key", key))
 		return nil, false, nil
 	}
 	return nil, false, err
@@ -89,7 +89,7 @@ func (r *ValkeyAdapter) GetOrCreateMetaHashSet(ctx context.Context, variableKey 
 	}
 
 	if valkey.IsValkeyNil(err) {
-		r.logger.Info("No value found for references", "key", key)
+		r.logger.Info("No value found for references", zap.String("key", key))
 		return "", false, nil
 	}
 	return "", false, err
@@ -99,7 +99,7 @@ func (r *ValkeyAdapter) GetSetAsStringSlice(ctx context.Context, variableKey str
 	key := r.composeStorageKey(variableKey, hubName)
 	valueAsSlice, err := r.client.Do(ctx, r.client.B().Smembers().Key(key).Build()).AsStrSlice()
 	if err != nil {
-		r.logger.Error(err, "failed to get a Set value from storage", "key", key)
+		r.logger.Error("failed to get a Set value from storage", zap.Error(err), zap.String("key", key))
 		return nil, err
 	}
 
@@ -114,10 +114,10 @@ func (r *ValkeyAdapter) GetString(ctx context.Context, variableKey string, hubNa
 	value, err := r.client.Do(ctx, r.client.B().Get().Key(key).Build()).ToString()
 	if err != nil {
 		if valkey.IsValkeyNil(err) {
-			r.logger.Info("No value found in storage", "key", key)
+			r.logger.Info("No value found in storage", zap.String("key", key))
 			return "", false, nil
 		}
-		r.logger.Error(err, "failed to get String value from storage", "key", key)
+		r.logger.Error("failed to get String value from storage", zap.Error(err), zap.String("key", key))
 		return "", false, err
 	}
 	r.logger.Info(fmt.Sprintf("Data received for %s: %s", key, value))
@@ -128,7 +128,7 @@ func (r *ValkeyAdapter) GetMapAsString(ctx context.Context, variableKey string, 
 	key := r.composeStorageKey(variableKey, hubName)
 	raw, err := r.client.Do(ctx, r.client.B().Hgetall().Key(key).Build()).AsStrMap()
 	if err != nil {
-		r.logger.Error(err, "failed to get Map value from storage", "key", key)
+		r.logger.Error("failed to get Map value from storage", zap.Error(err), zap.String("key", key))
 		return "", err
 	}
 
@@ -145,7 +145,7 @@ func (r *ValkeyAdapter) GetMapAsString(ctx context.Context, variableKey string, 
 
 	yamlData, err := yaml.Marshal(data)
 	if err != nil {
-		r.logger.Error(err, "failed to marshal Map to YAML", "key", key)
+		r.logger.Error("failed to marshal Map to YAML", zap.Error(err), zap.String("key", key))
 		return "", err
 	}
 
@@ -157,7 +157,7 @@ func (r *ValkeyAdapter) GetMap(ctx context.Context, variableKey string, hubName 
 	key := r.composeStorageKey(variableKey, hubName)
 	raw, err := r.client.Do(ctx, r.client.B().Hgetall().Key(key).Build()).AsStrMap()
 	if err != nil {
-		r.logger.Error(err, "failed to get Map value from storage", "key", key)
+		r.logger.Error("failed to get Map value from storage", zap.Error(err), zap.String("key", key))
 		return nil, err
 	}
 
@@ -166,7 +166,7 @@ func (r *ValkeyAdapter) GetMap(ctx context.Context, variableKey string, hubName 
 
 func (r *ValkeyAdapter) AddElementToSet(variableKey string, hubName string, value string) valkey.Completed {
 	key := r.composeStorageKey(variableKey, hubName)
-	r.logger.Info("Adding element to set", "variableKey", variableKey, "value", value, "key", key)
+	r.logger.Info("Adding element to set", zap.String("variableKey", variableKey), zap.Any("value", value), zap.String("key", key))
 	return r.client.B().Sadd().Key(key).Member(value).Build()
 }
 

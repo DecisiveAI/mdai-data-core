@@ -4,23 +4,23 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"go.uber.org/zap"
 	"iter"
 	"strings"
 	"time"
 
 	"github.com/decisiveai/mdai-data-core/audit"
 	variables "github.com/decisiveai/mdai-data-core/variables"
-	"github.com/go-logr/logr"
 	"github.com/valkey-io/valkey-go"
 )
 
 type HandlerAdapter struct {
 	client        valkey.Client
-	logger        logr.Logger
+	logger        *zap.Logger
 	valkeyAdapter *variables.ValkeyAdapter
 }
 
-func NewHandlerAdapter(client valkey.Client, logger logr.Logger, opts ...variables.ValkeyAdapterOption) *HandlerAdapter {
+func NewHandlerAdapter(client valkey.Client, logger *zap.Logger, opts ...variables.ValkeyAdapterOption) *HandlerAdapter {
 	va := variables.NewValkeyAdapter(client, logger, opts...)
 	ha := &HandlerAdapter{
 		client:        client,

@@ -5,25 +5,27 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-logr/logr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/valkey-io/valkey-go"
 	vmock "github.com/valkey-io/valkey-go/mock"
 	"go.uber.org/mock/gomock"
+	"go.uber.org/zap"
 	"gopkg.in/yaml.v3"
 )
 
 func newAdapterWithMock(t *testing.T) (*ValkeyAdapter, *vmock.Client, context.Context, *gomock.Controller) {
+	logger := zap.NewNop()
 	t.Helper()
 	ctrl := gomock.NewController(t)
 	client := vmock.NewClient(ctrl)
-	adapter := NewValkeyAdapter(client, logr.Discard())
+	adapter := NewValkeyAdapter(client, logger)
 	return adapter, client, context.Background(), ctrl
 }
 
 func TestComposeStorageKey(t *testing.T) {
-	adapter := NewValkeyAdapter(nil, logr.Discard())
+	logger := zap.NewNop()
+	adapter := NewValkeyAdapter(nil, logger)
 	assert.Equal(t, "variable/hub-1/myvar", adapter.composeStorageKey("myvar", "hub-1"))
 }
 
@@ -237,13 +239,15 @@ func TestGetOrCreateMetaHashSet(t *testing.T) {
 }
 
 func TestWithValkeyAuditStreamExpiryOption(t *testing.T) {
+	logger := zap.NewNop()
+
 	defaultTTL := 30 * 24 * time.Hour
 
-	a1 := NewValkeyAdapter(nil, logr.Discard())
+	a1 := NewValkeyAdapter(nil, logger)
 	assert.Equal(t, defaultTTL, a1.valkeyAuditStreamExpiry)
 
 	customTTL := 12 * time.Hour
-	a2 := NewValkeyAdapter(nil, logr.Discard(),
+	a2 := NewValkeyAdapter(nil, logger,
 		WithValkeyAuditStreamExpiry(customTTL),
 	)
 	assert.Equal(t, customTTL, a2.valkeyAuditStreamExpiry)
