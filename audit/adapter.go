@@ -2,12 +2,13 @@ package audit
 
 import (
 	"context"
-	"go.uber.org/zap"
 	"iter"
 	"regexp"
 	"strconv"
 	"strings"
 	"time"
+
+	"go.uber.org/zap"
 
 	"github.com/prometheus/alertmanager/template"
 	"github.com/valkey-io/valkey-go"

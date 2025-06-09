@@ -4,10 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"go.uber.org/zap"
 	"iter"
 	"strings"
 	"time"
+
+	"go.uber.org/zap"
 
 	"github.com/decisiveai/mdai-data-core/audit"
 	variables "github.com/decisiveai/mdai-data-core/variables"
