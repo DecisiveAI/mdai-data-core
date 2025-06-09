@@ -3,7 +3,6 @@ module github.com/decisiveai/mdai-data-core
 go 1.23.0
 
 require (
-	github.com/go-logr/logr v1.4.2
 	github.com/prometheus/alertmanager v0.28.1
 	github.com/stretchr/testify v1.10.0
 	github.com/valkey-io/valkey-go v1.0.57
