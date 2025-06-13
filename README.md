@@ -1,15 +1,35 @@
 # mdai-data-core
-![Coverage](https://img.shields.io/badge/Coverage-1-red)
+[![Chores](https://github.com/DecisiveAI/mdai-data-core/actions/workflows/chores.yml/badge.svg)](https://github.com/DecisiveAI/mdai-data-core/actions/workflows/chores.yml)
 
-## Getting Started
-### Importing mdai-operator module from private repo
-1. make sure the following env variable is set
+## Overview
+`mdai-data-core` is a Go library designed for efficient and structured interaction with Valkey storage.   
+
+It simplifies:
+-	**Variable Access**: Conveniently encapsulates and manages variables stored in Valkey.
+-	**Audit Management**: Provides robust auditing capabilities for operations performed on Valkey variables and other critical MDAI operations.
+-	**Handlers Integration**: Offers streamlined handlers interface for interacting directly with Valkey-stored data.
+
+## Installation
 ```shell
-export GOPRIVATE=github.com/decisiveai/*
+go get github.com/decisiveai/mdai-data-core
 ```
 
-2. Add the following section to your git client config:
-```shell
-[url "ssh://git@github.com/"]
-	insteadOf = https://github.com/
+## Usage
+Basic usage example:
+
+```go
+package main
+
+import (
+	"context"
+
+	datacore "github.com/decisiveai/mdai-data-core/variables"
+)
+
+func main() {
+	// initialize your valkeyClient (valkey-go), provide logger
+	client := datacore .NewValkeyAdapter(valKeyClient, zapLogger)
+	value, found, err := client.GetString(context.TODO(), "your_variable_name", "hub_name")
+	// proceed with error hadling and the rest of your logic
+}
 ```
