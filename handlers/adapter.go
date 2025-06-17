@@ -55,6 +55,7 @@ func (r *HandlerAdapter) AddElementToSet(ctx context.Context, variableKey string
 
 func (r *HandlerAdapter) RemoveElementFromSet(ctx context.Context, variableKey string, hubName string, value string) error {
 	variableUpdateCommand := r.valkeyAdapter.RemoveElementFromSet(variableKey, hubName, value)
+
 	auditAction := StoreVariableAction{
 		HubName:     hubName,
 		EventId:     time.Now().String(),
@@ -63,6 +64,7 @@ func (r *HandlerAdapter) RemoveElementFromSet(ctx context.Context, variableKey s
 		VariableRef: value,
 		Variable:    value,
 	}
+
 	auditLogCommand := r.makeVariableAuditLogActionCommand(auditAction)
 
 	results := r.client.DoMulti(
@@ -85,6 +87,7 @@ func (r *HandlerAdapter) AddSetMapElement(ctx context.Context, variableKey strin
 		VariableRef: field,
 		Variable:    value,
 	}
+
 	auditLogCommand := r.makeVariableAuditLogActionCommand(auditAction)
 
 	results := r.client.DoMulti(
@@ -98,6 +101,7 @@ func (r *HandlerAdapter) AddSetMapElement(ctx context.Context, variableKey strin
 
 func (r *HandlerAdapter) RemoveElementFromMap(ctx context.Context, variableKey string, hubName string, field string) error {
 	variableUpdateCommand := r.valkeyAdapter.RemoveMapEntry(variableKey, hubName, field)
+
 	auditAction := StoreVariableAction{
 		HubName:     hubName,
 		EventId:     time.Now().String(),
@@ -106,6 +110,7 @@ func (r *HandlerAdapter) RemoveElementFromMap(ctx context.Context, variableKey s
 		VariableRef: field,
 		Variable:    field,
 	}
+
 	auditLogCommand := r.makeVariableAuditLogActionCommand(auditAction)
 
 	results := r.client.DoMulti(
@@ -119,6 +124,7 @@ func (r *HandlerAdapter) RemoveElementFromMap(ctx context.Context, variableKey s
 
 func (r *HandlerAdapter) SetStringValue(ctx context.Context, variableKey string, hubName string, value string) error {
 	variableUpdateCommand := r.valkeyAdapter.SetString(variableKey, hubName, value)
+
 	auditAction := StoreVariableAction{
 		HubName:     hubName,
 		EventId:     time.Now().String(),
@@ -127,6 +133,7 @@ func (r *HandlerAdapter) SetStringValue(ctx context.Context, variableKey string,
 		VariableRef: value,
 		Variable:    value,
 	}
+
 	auditLogCommand := r.makeVariableAuditLogActionCommand(auditAction)
 
 	results := r.client.DoMulti(
