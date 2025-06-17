@@ -1,5 +1,6 @@
+[![codecov](https://codecov.io/gh/DecisiveAI/mdai-data-core/graph/badge.svg?token=UPHRBSXOON)](https://codecov.io/gh/DecisiveAI/mdai-data-core)
+
 # mdai-data-core
-[![Chores](https://github.com/DecisiveAI/mdai-data-core/actions/workflows/chores.yml/badge.svg)](https://github.com/DecisiveAI/mdai-data-core/actions/workflows/chores.yml)
 
 ## Overview
 `mdai-data-core` is a Go library designed for efficient and structured interaction with Valkey storage.   
