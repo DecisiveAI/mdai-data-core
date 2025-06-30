@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"go.uber.org/zap"
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/informers"
 	coreinformers "k8s.io/client-go/informers/core/v1"
@@ -98,7 +98,7 @@ func NewConfigMapController(configMapType string, namespace string, clientset ku
 }
 
 func getHubName(configMap *v1.ConfigMap) (string, error) {
-	if configMap.Labels != nil && len(configMap.Labels) > 0 {
+	if len(configMap.Labels) > 0 {
 		hubName := configMap.Labels[LabelMdaiHubName]
 		return hubName, nil
 	}
