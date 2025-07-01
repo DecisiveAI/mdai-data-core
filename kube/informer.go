@@ -94,8 +94,7 @@ func NewConfigMapController(configMapType string, namespace string, clientset ku
 }
 
 func getHubName(configMap *v1.ConfigMap) (string, error) {
-	if len(configMap.Labels) > 0 {
-		hubName := configMap.Labels[LabelMdaiHubName]
+	if hubName, ok := configMap.Labels[LabelMdaiHubName]; ok {
 		return hubName, nil
 	}
 	return "", fmt.Errorf("ConfigMap does not have hub name label")
