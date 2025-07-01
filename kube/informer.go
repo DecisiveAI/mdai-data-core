@@ -61,7 +61,6 @@ func NewConfigMapController(configMapType string, namespace string, clientset ku
 			}),
 		)
 	default:
-		logger.Error("unsupported ConfigMap type", zap.String("ConfigMap type", configMapType))
 		return nil, fmt.Errorf("unsupported ConfigMap type")
 	}
 

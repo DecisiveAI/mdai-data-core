@@ -189,3 +189,27 @@ func TestNewConfigMapController_MultipleNs(t *testing.T) {
 	assert.Equal(t, hubMap["mdaihub-third"], configMap3)
 
 }
+func TestNewConfigMapController_NonExistentCmType(t *testing.T) {
+	var logger *zap.Logger
+
+	configMap1 := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "mdaihub-first-manual-variables",
+			Namespace: "first",
+			Labels: map[string]string{
+				ConfigMapTypeLabel: ManualEnvConfigMapType,
+				LabelMdaiHubName:   "mdaihub-first",
+			},
+		},
+		Data: map[string]string{
+			"first_manual_variable": "boolean",
+		},
+	}
+
+	clientset := fake.NewClientset(configMap1)
+
+	cmController, err := NewConfigMapController("hub-nonexistent-cm-type", "second", clientset, logger)
+	require.Nil(t, cmController)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "unsupported ConfigMap type")
+}
