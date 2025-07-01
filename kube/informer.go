@@ -2,7 +2,6 @@ package kube
 
 import (
 	"fmt"
-	"log"
 	"os"
 	"sync"
 	"time"
@@ -34,7 +33,7 @@ type ConfigMapController struct {
 	Lock            sync.RWMutex
 	Namespace       string
 	ConfigMapType   string
-	Logger          *log.Logger
+	Logger          *zap.Logger
 }
 
 func (c *ConfigMapController) Run(stopCh chan struct{}) error {
@@ -50,24 +49,21 @@ func NewConfigMapController(configMapType string, namespace string, clientset ku
 
 	defaultResyncTime := time.Hour * 24
 
-	informerFactory := informers.NewSharedInformerFactoryWithOptions(
-		clientset,
-		defaultResyncTime,
-		informers.WithNamespace(namespace),
-		informers.WithTweakListOptions(func(opts *metav1.ListOptions) {
-			switch configMapType {
-			case EnvConfigMapType, ManualEnvConfigMapType, AutomationConfigMapType:
-				{
-					opts.LabelSelector = fmt.Sprintf("%s=%s", ConfigMapTypeLabel, configMapType)
-				}
-			default:
-				{
-					logger.Error("Unsupported configMap, creating informer for all ConfigMaps, managed by Hub", zap.String("ConfigMap type", configMapType))
-					opts.LabelSelector = ManagedByMdaiOperatorLabel
-				}
-			}
-		}),
-	)
+	var informerFactory informers.SharedInformerFactory
+	switch configMapType {
+	case EnvConfigMapType, ManualEnvConfigMapType, AutomationConfigMapType:
+		informerFactory = informers.NewSharedInformerFactoryWithOptions(
+			clientset,
+			defaultResyncTime,
+			informers.WithNamespace(namespace),
+			informers.WithTweakListOptions(func(opts *metav1.ListOptions) {
+				opts.LabelSelector = fmt.Sprintf("%s=%s", ConfigMapTypeLabel, configMapType)
+			}),
+		)
+	default:
+		logger.Error("unsupported ConfigMap type", zap.String("ConfigMap type", configMapType))
+		return nil, fmt.Errorf("unsupported ConfigMap type")
+	}
 
 	cmInformer := informerFactory.Core().V1().ConfigMaps()
 
@@ -77,12 +73,13 @@ func NewConfigMapController(configMapType string, namespace string, clientset ku
 			hubName, err := getHubName(obj.(*v1.ConfigMap))
 			if err != nil {
 				logger.Error("failed to get hub name for ConfigMap", zap.String("ConfigMap name", obj.(*v1.ConfigMap).Name))
+				return nil, err
 			}
 			hubNames = append(hubNames, hubName)
 			return hubNames, nil
 		},
 	}); err != nil {
-		logger.Fatal("failed to add index", zap.Error(err))
+		logger.Error("failed to add index", zap.Error(err))
 		return nil, err
 	}
 
@@ -91,7 +88,7 @@ func NewConfigMapController(configMapType string, namespace string, clientset ku
 		ConfigMapType:   configMapType,
 		InformerFactory: informerFactory,
 		CmInformer:      cmInformer,
-		Logger:          log.New(os.Stdout, "[ConfigMapManager] ", log.LstdFlags),
+		Logger:          logger,
 	}
 
 	return c, nil
@@ -110,13 +107,13 @@ func NewK8sClient(logger *zap.Logger) (kubernetes.Interface, error) {
 	if err != nil {
 		kubeconfig, err := os.UserHomeDir()
 		if err != nil {
-			logger.Fatal("Failed to load k8s config", zap.Error(err))
+			logger.Error("Failed to load k8s config", zap.Error(err))
 			return nil, err
 		}
 
 		config, err = clientcmd.BuildConfigFromFlags("", kubeconfig+"/.kube/config")
 		if err != nil {
-			logger.Fatal("Failed to build k8s config", zap.Error(err))
+			logger.Error("Failed to build k8s config", zap.Error(err))
 			return nil, err
 		}
 	}

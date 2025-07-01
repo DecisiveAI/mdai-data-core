@@ -1,12 +1,11 @@
 package kube
 
 import (
-	"context"
-	"sort"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -15,7 +14,7 @@ import (
 
 func TestNewConfigMapController_SingleNs(t *testing.T) {
 	var logger *zap.Logger
-	ctx := context.TODO()
+	ctx := t.Context()
 
 	configMap1 := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
@@ -71,27 +70,24 @@ func TestNewConfigMapController_SingleNs(t *testing.T) {
 		logger.Fatal("failed to run ConfigMap controller", zap.Error(err))
 	}
 
-	_, _ = clientset.CoreV1().ConfigMaps("first").Create(context.TODO(), configMap1, metav1.CreateOptions{})
-	_, _ = clientset.CoreV1().ConfigMaps("second").Create(context.TODO(), configMap2, metav1.CreateOptions{})
-	_, _ = clientset.CoreV1().ConfigMaps("second").Create(context.TODO(), configMap3, metav1.CreateOptions{})
+	_, _ = clientset.CoreV1().ConfigMaps("first").Create(ctx, configMap1, metav1.CreateOptions{})
+	_, _ = clientset.CoreV1().ConfigMaps("second").Create(ctx, configMap2, metav1.CreateOptions{})
+	_, _ = clientset.CoreV1().ConfigMaps("second").Create(ctx, configMap3, metav1.CreateOptions{})
 	time.Sleep(100 * time.Millisecond)
 
 	// List ConfigMaps
 	configMaps, err := clientset.CoreV1().ConfigMaps("second").List(ctx, metav1.ListOptions{})
-	if err != nil {
-		t.Fatalf("Failed to list ConfigMaps: %v", err)
-	}
-	assert.Equal(t, 2, len(configMaps.Items))
+	require.NoError(t, err)
+	assert.Len(t, configMaps.Items, 2)
 
 	cmController.Lock.RLock()
 	defer cmController.Lock.RUnlock()
 
 	indexer := cmController.CmInformer.Informer().GetIndexer()
 	hubNames := indexer.ListIndexFuncValues(ByHub)
-	sort.Strings(hubNames)
-	assert.Equal(t, hubNames, []string{"mdaihub-second", "mdaihub-third"})
+	assert.ElementsMatch(t, hubNames, []string{"mdaihub-second", "mdaihub-third"})
 
-	hubMap := make(map[string]any)
+	hubMap := make(map[string]*corev1.ConfigMap)
 	for _, hubName := range hubNames {
 		objs, err := indexer.ByIndex(ByHub, hubName)
 		if err != nil {
@@ -108,7 +104,7 @@ func TestNewConfigMapController_SingleNs(t *testing.T) {
 }
 func TestNewConfigMapController_MultipleNs(t *testing.T) {
 	var logger *zap.Logger
-	ctx := context.TODO()
+	ctx := t.Context()
 
 	configMap1 := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
@@ -153,38 +149,31 @@ func TestNewConfigMapController_MultipleNs(t *testing.T) {
 	clientset := fake.NewClientset(configMap1, configMap2, configMap3)
 
 	cmController, err := NewConfigMapController(ManualEnvConfigMapType, corev1.NamespaceAll, clientset, logger)
-	if err != nil {
-		logger.Fatal("failed to create ConfigMap controller", zap.Error(err))
-	}
+	require.NoError(t, err)
 
 	stop := make(chan struct{})
 	defer close(stop)
 	err = cmController.Run(stop)
-	if err != nil {
-		logger.Fatal("failed to run ConfigMap controller", zap.Error(err))
-	}
+	require.NoError(t, err)
 
-	_, _ = clientset.CoreV1().ConfigMaps("first").Create(context.TODO(), configMap1, metav1.CreateOptions{})
-	_, _ = clientset.CoreV1().ConfigMaps("second").Create(context.TODO(), configMap2, metav1.CreateOptions{})
-	_, _ = clientset.CoreV1().ConfigMaps("second").Create(context.TODO(), configMap3, metav1.CreateOptions{})
+	_, _ = clientset.CoreV1().ConfigMaps("first").Create(ctx, configMap1, metav1.CreateOptions{})
+	_, _ = clientset.CoreV1().ConfigMaps("second").Create(ctx, configMap2, metav1.CreateOptions{})
+	_, _ = clientset.CoreV1().ConfigMaps("second").Create(ctx, configMap3, metav1.CreateOptions{})
 	time.Sleep(100 * time.Millisecond)
 
 	// List ConfigMaps
 	configMaps, err := clientset.CoreV1().ConfigMaps(corev1.NamespaceAll).List(ctx, metav1.ListOptions{})
-	if err != nil {
-		t.Fatalf("Failed to list ConfigMaps: %v", err)
-	}
-	assert.Equal(t, 3, len(configMaps.Items))
+	require.NoError(t, err)
+	assert.Len(t, configMaps.Items, 3)
 
 	cmController.Lock.RLock()
 	defer cmController.Lock.RUnlock()
 
 	indexer := cmController.CmInformer.Informer().GetIndexer()
 	hubNames := indexer.ListIndexFuncValues(ByHub)
-	sort.Strings(hubNames)
-	assert.Equal(t, hubNames, []string{"mdaihub-first", "mdaihub-second", "mdaihub-third"})
+	assert.ElementsMatch(t, hubNames, []string{"mdaihub-first", "mdaihub-second", "mdaihub-third"})
 
-	hubMap := make(map[string]any)
+	hubMap := make(map[string]*corev1.ConfigMap)
 	for _, hubName := range hubNames {
 		objs, err := indexer.ByIndex(ByHub, hubName)
 		if err != nil {
