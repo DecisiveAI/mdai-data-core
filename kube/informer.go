@@ -21,26 +21,26 @@ import (
 const (
 	ByHub                      = "IndexByHub"
 	ManagedByMdaiOperatorLabel = "app.kubernetes.io/managed-by=mdai-operator"
-	envConfigMapType           = "hub-variables"
-	manualEnvConfigMapType     = "hub-manual-variables"
-	automationConfigMapType    = "hub-automation"
+	EnvConfigMapType           = "hub-variables"
+	ManualEnvConfigMapType     = "hub-manual-variables"
+	AutomationConfigMapType    = "hub-automation"
 	LabelMdaiHubName           = "mydecisive.ai/hub-name"
-	configMapTypeLabel         = "mydecisive.ai/configmap-type"
+	ConfigMapTypeLabel         = "mydecisive.ai/configmap-type"
 )
 
 type ConfigMapController struct {
-	informerFactory informers.SharedInformerFactory
-	cmInformer      coreinformers.ConfigMapInformer
-	lock            sync.RWMutex
-	namespace       string
-	configMapType   string
-	logger          *log.Logger
+	InformerFactory informers.SharedInformerFactory
+	CmInformer      coreinformers.ConfigMapInformer
+	Lock            sync.RWMutex
+	Namespace       string
+	ConfigMapType   string
+	Logger          *log.Logger
 }
 
 func (c *ConfigMapController) Run(stopCh chan struct{}) error {
-	c.informerFactory.Start(stopCh)
+	c.InformerFactory.Start(stopCh)
 
-	if !cache.WaitForCacheSync(stopCh, c.cmInformer.Informer().HasSynced) {
+	if !cache.WaitForCacheSync(stopCh, c.CmInformer.Informer().HasSynced) {
 		return fmt.Errorf("failed to sync")
 	}
 	return nil
@@ -56,9 +56,9 @@ func NewConfigMapController(configMapType string, namespace string, clientset ku
 		informers.WithNamespace(namespace),
 		informers.WithTweakListOptions(func(opts *metav1.ListOptions) {
 			switch configMapType {
-			case envConfigMapType, manualEnvConfigMapType, automationConfigMapType:
+			case EnvConfigMapType, ManualEnvConfigMapType, AutomationConfigMapType:
 				{
-					opts.LabelSelector = fmt.Sprintf("%s=%s", configMapTypeLabel, configMapType)
+					opts.LabelSelector = fmt.Sprintf("%s=%s", ConfigMapTypeLabel, configMapType)
 				}
 			default:
 				{
@@ -87,11 +87,11 @@ func NewConfigMapController(configMapType string, namespace string, clientset ku
 	}
 
 	c := &ConfigMapController{
-		namespace:       namespace,
-		configMapType:   configMapType,
-		informerFactory: informerFactory,
-		cmInformer:      cmInformer,
-		logger:          log.New(os.Stdout, "[ConfigMapManager] ", log.LstdFlags),
+		Namespace:       namespace,
+		ConfigMapType:   configMapType,
+		InformerFactory: informerFactory,
+		CmInformer:      cmInformer,
+		Logger:          log.New(os.Stdout, "[ConfigMapManager] ", log.LstdFlags),
 	}
 
 	return c, nil

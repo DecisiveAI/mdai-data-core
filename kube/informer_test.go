@@ -22,7 +22,7 @@ func TestNewConfigMapController_SingleNs(t *testing.T) {
 			Name:      "mdaihub-first-manual-variables",
 			Namespace: "first",
 			Labels: map[string]string{
-				configMapTypeLabel: manualEnvConfigMapType,
+				ConfigMapTypeLabel: ManualEnvConfigMapType,
 				LabelMdaiHubName:   "mdaihub-first",
 			},
 		},
@@ -35,7 +35,7 @@ func TestNewConfigMapController_SingleNs(t *testing.T) {
 			Name:      "mdaihub-second-manual-variables",
 			Namespace: "second",
 			Labels: map[string]string{
-				configMapTypeLabel: manualEnvConfigMapType,
+				ConfigMapTypeLabel: ManualEnvConfigMapType,
 				LabelMdaiHubName:   "mdaihub-second",
 			},
 		},
@@ -48,7 +48,7 @@ func TestNewConfigMapController_SingleNs(t *testing.T) {
 			Name:      "mdaihub-third-manual-variables",
 			Namespace: "second",
 			Labels: map[string]string{
-				configMapTypeLabel: manualEnvConfigMapType,
+				ConfigMapTypeLabel: ManualEnvConfigMapType,
 				LabelMdaiHubName:   "mdaihub-third",
 			},
 		},
@@ -59,7 +59,7 @@ func TestNewConfigMapController_SingleNs(t *testing.T) {
 
 	clientset := fake.NewClientset(configMap1, configMap2, configMap3)
 
-	cmController, err := NewConfigMapController(manualEnvConfigMapType, "second", clientset, logger)
+	cmController, err := NewConfigMapController(ManualEnvConfigMapType, "second", clientset, logger)
 	if err != nil {
 		logger.Fatal("failed to create ConfigMap controller", zap.Error(err))
 	}
@@ -83,10 +83,10 @@ func TestNewConfigMapController_SingleNs(t *testing.T) {
 	}
 	assert.Equal(t, 2, len(configMaps.Items))
 
-	cmController.lock.RLock()
-	defer cmController.lock.RUnlock()
+	cmController.Lock.RLock()
+	defer cmController.Lock.RUnlock()
 
-	indexer := cmController.cmInformer.Informer().GetIndexer()
+	indexer := cmController.CmInformer.Informer().GetIndexer()
 	hubNames := indexer.ListIndexFuncValues(ByHub)
 	sort.Strings(hubNames)
 	assert.Equal(t, hubNames, []string{"mdaihub-second", "mdaihub-third"})
@@ -115,7 +115,7 @@ func TestNewConfigMapController_MultipleNs(t *testing.T) {
 			Name:      "mdaihub-first-manual-variables",
 			Namespace: "first",
 			Labels: map[string]string{
-				configMapTypeLabel: manualEnvConfigMapType,
+				ConfigMapTypeLabel: ManualEnvConfigMapType,
 				LabelMdaiHubName:   "mdaihub-first",
 			},
 		},
@@ -128,7 +128,7 @@ func TestNewConfigMapController_MultipleNs(t *testing.T) {
 			Name:      "mdaihub-second-manual-variables",
 			Namespace: "second",
 			Labels: map[string]string{
-				configMapTypeLabel: manualEnvConfigMapType,
+				ConfigMapTypeLabel: ManualEnvConfigMapType,
 				LabelMdaiHubName:   "mdaihub-second",
 			},
 		},
@@ -141,7 +141,7 @@ func TestNewConfigMapController_MultipleNs(t *testing.T) {
 			Name:      "mdaihub-third-manual-variables",
 			Namespace: "second",
 			Labels: map[string]string{
-				configMapTypeLabel: manualEnvConfigMapType,
+				ConfigMapTypeLabel: ManualEnvConfigMapType,
 				LabelMdaiHubName:   "mdaihub-third",
 			},
 		},
@@ -152,7 +152,7 @@ func TestNewConfigMapController_MultipleNs(t *testing.T) {
 
 	clientset := fake.NewClientset(configMap1, configMap2, configMap3)
 
-	cmController, err := NewConfigMapController(manualEnvConfigMapType, corev1.NamespaceAll, clientset, logger)
+	cmController, err := NewConfigMapController(ManualEnvConfigMapType, corev1.NamespaceAll, clientset, logger)
 	if err != nil {
 		logger.Fatal("failed to create ConfigMap controller", zap.Error(err))
 	}
@@ -176,10 +176,10 @@ func TestNewConfigMapController_MultipleNs(t *testing.T) {
 	}
 	assert.Equal(t, 3, len(configMaps.Items))
 
-	cmController.lock.RLock()
-	defer cmController.lock.RUnlock()
+	cmController.Lock.RLock()
+	defer cmController.Lock.RUnlock()
 
-	indexer := cmController.cmInformer.Informer().GetIndexer()
+	indexer := cmController.CmInformer.Informer().GetIndexer()
 	hubNames := indexer.ListIndexFuncValues(ByHub)
 	sort.Strings(hubNames)
 	assert.Equal(t, hubNames, []string{"mdaihub-first", "mdaihub-second", "mdaihub-third"})
