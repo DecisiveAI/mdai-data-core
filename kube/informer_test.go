@@ -63,9 +63,8 @@ func TestNewConfigMapController_SingleNs(t *testing.T) {
 		logger.Fatal("failed to create ConfigMap controller", zap.Error(err))
 	}
 
-	stop := make(chan struct{})
-	defer close(stop)
-	err = cmController.Run(stop)
+	err = cmController.Run()
+	defer cmController.Stop()
 	if err != nil {
 		logger.Fatal("failed to run ConfigMap controller", zap.Error(err))
 	}
@@ -80,8 +79,8 @@ func TestNewConfigMapController_SingleNs(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, configMaps.Items, 2)
 
-	cmController.Lock.RLock()
-	defer cmController.Lock.RUnlock()
+	cmController.RLock()
+	defer cmController.RUnlock()
 
 	indexer := cmController.CmInformer.Informer().GetIndexer()
 	hubNames := indexer.ListIndexFuncValues(ByHub)
@@ -151,9 +150,8 @@ func TestNewConfigMapController_MultipleNs(t *testing.T) {
 	cmController, err := NewConfigMapController(ManualEnvConfigMapType, corev1.NamespaceAll, clientset, logger)
 	require.NoError(t, err)
 
-	stop := make(chan struct{})
-	defer close(stop)
-	err = cmController.Run(stop)
+	err = cmController.Run()
+	defer cmController.Stop()
 	require.NoError(t, err)
 
 	_, _ = clientset.CoreV1().ConfigMaps("first").Create(ctx, configMap1, metav1.CreateOptions{})
@@ -166,8 +164,8 @@ func TestNewConfigMapController_MultipleNs(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, configMaps.Items, 3)
 
-	cmController.Lock.RLock()
-	defer cmController.Lock.RUnlock()
+	cmController.RLock()
+	defer cmController.RUnlock()
 
 	indexer := cmController.CmInformer.Informer().GetIndexer()
 	hubNames := indexer.ListIndexFuncValues(ByHub)

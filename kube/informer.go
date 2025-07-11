@@ -30,19 +30,46 @@ const (
 type ConfigMapController struct {
 	InformerFactory informers.SharedInformerFactory
 	CmInformer      coreinformers.ConfigMapInformer
-	Lock            sync.RWMutex
-	Namespace       string
-	ConfigMapType   string
+	lock            sync.RWMutex
+	namespace       string
+	configMapType   string
 	Logger          *zap.Logger
+	stopCh          chan struct{}
 }
 
-func (c *ConfigMapController) Run(stopCh chan struct{}) error {
-	c.InformerFactory.Start(stopCh)
+func (cmc *ConfigMapController) Lock() {
+	cmc.lock.Lock()
+}
 
-	if !cache.WaitForCacheSync(stopCh, c.CmInformer.Informer().HasSynced) {
-		return fmt.Errorf("failed to sync")
-	}
-	return nil
+func (cmc *ConfigMapController) Unlock() {
+	cmc.lock.Unlock()
+}
+
+func (cmc *ConfigMapController) RLock() {
+	cmc.lock.RLock()
+}
+
+func (cmc *ConfigMapController) RUnlock() {
+	cmc.lock.RUnlock()
+}
+
+func (cmc *ConfigMapController) Run() error {
+	resultCh := make(chan error)
+	cmc.stopCh = make(chan struct{})
+
+	go func() {
+		cmc.InformerFactory.Start(cmc.stopCh)
+		if !cache.WaitForCacheSync(cmc.stopCh, cmc.CmInformer.Informer().HasSynced) {
+			resultCh <- fmt.Errorf("failed to sync")
+		} else {
+			resultCh <- nil
+		}
+	}()
+	return <-resultCh
+}
+
+func (cmc *ConfigMapController) Stop() {
+	close(cmc.stopCh)
 }
 
 func NewConfigMapController(configMapType string, namespace string, clientset kubernetes.Interface, logger *zap.Logger) (*ConfigMapController, error) {
@@ -83,8 +110,8 @@ func NewConfigMapController(configMapType string, namespace string, clientset ku
 	}
 
 	c := &ConfigMapController{
-		Namespace:       namespace,
-		ConfigMapType:   configMapType,
+		namespace:       namespace,
+		configMapType:   configMapType,
 		InformerFactory: informerFactory,
 		CmInformer:      cmInformer,
 		Logger:          logger,
@@ -116,4 +143,42 @@ func NewK8sClient(logger *zap.Logger) (kubernetes.Interface, error) {
 		}
 	}
 	return kubernetes.NewForConfig(config)
+}
+
+func (cmc *ConfigMapController) GetAllHubsToDataMap() (map[string]any, error) {
+	cmc.RLock()
+	defer cmc.RUnlock()
+
+	hubMap := make(map[string]any)
+
+	indexer := cmc.CmInformer.Informer().GetIndexer()
+	hubNames := indexer.ListIndexFuncValues(ByHub)
+	for _, hubName := range hubNames {
+		objs, err := indexer.ByIndex(ByHub, hubName)
+		if err != nil {
+			continue
+		}
+		for _, obj := range objs {
+			cm := obj.(*v1.ConfigMap)
+			hubMap[hubName] = cm.Data
+		}
+	}
+	return hubMap, nil
+}
+
+func (cmc *ConfigMapController) GetHubData(hubName string) ([]map[string]string, error) {
+	cmc.RLock()
+	defer cmc.RUnlock()
+
+	indexer := cmc.CmInformer.Informer().GetIndexer()
+	objs, err := indexer.ByIndex(ByHub, hubName)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]map[string]string, 0, len(objs))
+	for _, obj := range objs {
+		cm := obj.(*v1.ConfigMap)
+		result = append(result, cm.Data)
+	}
+	return result, nil
 }
