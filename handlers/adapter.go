@@ -32,15 +32,16 @@ func NewHandlerAdapter(client valkey.Client, logger *zap.Logger, opts ...variabl
 	return ha
 }
 
-func (r *HandlerAdapter) AddElementToSet(ctx context.Context, variableKey string, hubName string, value string) error {
+func (r *HandlerAdapter) AddElementToSet(ctx context.Context, variableKey string, hubName string, value string, correlationId string) error {
 	variableUpdateCommand := r.valkeyAdapter.AddElementToSet(variableKey, hubName, value)
 
 	auditAction := StoreVariableAction{
-		EventId:     time.Now().String(),
-		Operation:   "Add element to set",
-		Target:      variableKey,
-		VariableRef: value,
-		Variable:    value,
+		EventId:       time.Now().String(),
+		Operation:     "Add element to set",
+		Target:        variableKey,
+		VariableRef:   value,
+		Variable:      value,
+		CorrelationId: correlationId,
 	}
 	auditLogCommand := r.makeVariableAuditLogActionCommand(auditAction)
 
@@ -53,16 +54,17 @@ func (r *HandlerAdapter) AddElementToSet(ctx context.Context, variableKey string
 	return r.accumulateErrors(results, variableKey) // TODO we should retry here
 }
 
-func (r *HandlerAdapter) RemoveElementFromSet(ctx context.Context, variableKey string, hubName string, value string) error {
+func (r *HandlerAdapter) RemoveElementFromSet(ctx context.Context, variableKey string, hubName string, value string, correlationId string) error {
 	variableUpdateCommand := r.valkeyAdapter.RemoveElementFromSet(variableKey, hubName, value)
 
 	auditAction := StoreVariableAction{
-		HubName:     hubName,
-		EventId:     time.Now().String(),
-		Operation:   "Remove element from set",
-		Target:      variableKey,
-		VariableRef: value,
-		Variable:    value,
+		HubName:       hubName,
+		EventId:       time.Now().String(),
+		Operation:     "Remove element from set",
+		Target:        variableKey,
+		VariableRef:   value,
+		Variable:      value,
+		CorrelationId: correlationId,
 	}
 
 	auditLogCommand := r.makeVariableAuditLogActionCommand(auditAction)
@@ -76,16 +78,17 @@ func (r *HandlerAdapter) RemoveElementFromSet(ctx context.Context, variableKey s
 	return r.accumulateErrors(results, variableKey) // TODO we should retry here
 }
 
-func (r *HandlerAdapter) AddSetMapElement(ctx context.Context, variableKey string, hubName string, field string, value string) error {
+func (r *HandlerAdapter) AddSetMapElement(ctx context.Context, variableKey string, hubName string, field string, value string, correlationId string) error {
 	variableUpdateCommand := r.valkeyAdapter.SetMapEntry(variableKey, hubName, field, value)
 
 	auditAction := StoreVariableAction{
-		HubName:     hubName,
-		EventId:     time.Now().String(),
-		Operation:   "Set map entry",
-		Target:      variableKey,
-		VariableRef: field,
-		Variable:    value,
+		HubName:       hubName,
+		EventId:       time.Now().String(),
+		Operation:     "Set map entry",
+		Target:        variableKey,
+		VariableRef:   field,
+		Variable:      value,
+		CorrelationId: correlationId,
 	}
 
 	auditLogCommand := r.makeVariableAuditLogActionCommand(auditAction)
@@ -99,16 +102,17 @@ func (r *HandlerAdapter) AddSetMapElement(ctx context.Context, variableKey strin
 	return r.accumulateErrors(results, variableKey) // TODO we should retry here
 }
 
-func (r *HandlerAdapter) RemoveElementFromMap(ctx context.Context, variableKey string, hubName string, field string) error {
+func (r *HandlerAdapter) RemoveElementFromMap(ctx context.Context, variableKey string, hubName string, field string, correlationId string) error {
 	variableUpdateCommand := r.valkeyAdapter.RemoveMapEntry(variableKey, hubName, field)
 
 	auditAction := StoreVariableAction{
-		HubName:     hubName,
-		EventId:     time.Now().String(),
-		Operation:   "Remove element from set",
-		Target:      variableKey,
-		VariableRef: field,
-		Variable:    field,
+		HubName:       hubName,
+		EventId:       time.Now().String(),
+		Operation:     "Remove element from set",
+		Target:        variableKey,
+		VariableRef:   field,
+		Variable:      field,
+		CorrelationId: correlationId,
 	}
 
 	auditLogCommand := r.makeVariableAuditLogActionCommand(auditAction)
@@ -122,16 +126,17 @@ func (r *HandlerAdapter) RemoveElementFromMap(ctx context.Context, variableKey s
 	return r.accumulateErrors(results, variableKey) // TODO we should retry here
 }
 
-func (r *HandlerAdapter) SetStringValue(ctx context.Context, variableKey string, hubName string, value string) error {
+func (r *HandlerAdapter) SetStringValue(ctx context.Context, variableKey string, hubName string, value string, correlationId string) error {
 	variableUpdateCommand := r.valkeyAdapter.SetString(variableKey, hubName, value)
 
 	auditAction := StoreVariableAction{
-		HubName:     hubName,
-		EventId:     time.Now().String(),
-		Operation:   "Set string value",
-		Target:      variableKey,
-		VariableRef: value,
-		Variable:    value,
+		HubName:       hubName,
+		EventId:       time.Now().String(),
+		Operation:     "Set string value",
+		Target:        variableKey,
+		VariableRef:   value,
+		Variable:      value,
+		CorrelationId: correlationId,
 	}
 
 	auditLogCommand := r.makeVariableAuditLogActionCommand(auditAction)
@@ -167,12 +172,13 @@ func (r *HandlerAdapter) makeVariableAuditLogActionCommand(action StoreVariableA
 }
 
 type StoreVariableAction struct {
-	HubName     string `json:"hub_name"`
-	EventId     string `json:"event_id"`
-	Operation   string `json:"operation"`
-	Target      string `json:"target"`
-	VariableRef string `json:"variable_ref"`
-	Variable    string `json:"variable"`
+	HubName       string `json:"hub_name"`
+	EventId       string `json:"event_id"`
+	Operation     string `json:"operation"`
+	Target        string `json:"target"`
+	VariableRef   string `json:"variable_ref"`
+	Variable      string `json:"variable"`
+	CorrelationId string `json:"correlation_id"`
 }
 
 func (action StoreVariableAction) ToSequence() iter.Seq2[string, string] {
