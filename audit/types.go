@@ -7,6 +7,8 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
+// Deprecated: With the move to the MdaiEvent type from the mdai-event-hub, this type is mostly redundant.
+// Suggested to use a map[string]string with audit/adapter.InsertAuditLogEventFromMap instead
 type MdaiHubEvent struct {
 	HubName             string `json:"hub_name"`              // name of hub event was triggered
 	Event               string `json:"event"`                 // event type (evaluation/prometheus_alert)
