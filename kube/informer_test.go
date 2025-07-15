@@ -79,9 +79,6 @@ func TestNewConfigMapController_SingleNs(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, configMaps.Items, 2)
 
-	cmController.RLock()
-	defer cmController.RUnlock()
-
 	indexer := cmController.CmInformer.Informer().GetIndexer()
 	hubNames := indexer.ListIndexFuncValues(ByHub)
 	assert.ElementsMatch(t, hubNames, []string{"mdaihub-second", "mdaihub-third"})
@@ -163,9 +160,6 @@ func TestNewConfigMapController_MultipleNs(t *testing.T) {
 	configMaps, err := clientset.CoreV1().ConfigMaps(corev1.NamespaceAll).List(ctx, metav1.ListOptions{})
 	require.NoError(t, err)
 	assert.Len(t, configMaps.Items, 3)
-
-	cmController.RLock()
-	defer cmController.RUnlock()
 
 	indexer := cmController.CmInformer.Informer().GetIndexer()
 	hubNames := indexer.ListIndexFuncValues(ByHub)

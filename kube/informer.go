@@ -3,7 +3,6 @@ package kube
 import (
 	"fmt"
 	"os"
-	"sync"
 	"time"
 
 	"go.uber.org/zap"
@@ -18,13 +17,12 @@ import (
 )
 
 const (
-	ByHub                      = "IndexByHub"
-	ManagedByMdaiOperatorLabel = "app.kubernetes.io/managed-by=mdai-operator"
-	EnvConfigMapType           = "hub-variables"
-	ManualEnvConfigMapType     = "hub-manual-variables"
-	AutomationConfigMapType    = "hub-automation"
-	LabelMdaiHubName           = "mydecisive.ai/hub-name"
-	ConfigMapTypeLabel         = "mydecisive.ai/configmap-type"
+	ByHub                   = "IndexByHub"
+	EnvConfigMapType        = "hub-variables"
+	ManualEnvConfigMapType  = "hub-manual-variables"
+	AutomationConfigMapType = "hub-automation"
+	LabelMdaiHubName        = "mydecisive.ai/hub-name"
+	ConfigMapTypeLabel      = "mydecisive.ai/configmap-type"
 )
 
 var (
@@ -36,27 +34,10 @@ var (
 type ConfigMapController struct {
 	InformerFactory informers.SharedInformerFactory
 	CmInformer      coreinformers.ConfigMapInformer
-	lock            sync.RWMutex
 	namespace       string
 	configMapType   string
 	Logger          *zap.Logger
 	stopCh          chan struct{}
-}
-
-func (cmc *ConfigMapController) Lock() {
-	cmc.lock.Lock()
-}
-
-func (cmc *ConfigMapController) Unlock() {
-	cmc.lock.Unlock()
-}
-
-func (cmc *ConfigMapController) RLock() {
-	cmc.lock.RLock()
-}
-
-func (cmc *ConfigMapController) RUnlock() {
-	cmc.lock.RUnlock()
 }
 
 func (cmc *ConfigMapController) Run() error {
@@ -147,9 +128,6 @@ func NewK8sClient(logger *zap.Logger) (kubernetes.Interface, error) {
 }
 
 func (cmc *ConfigMapController) GetAllHubsToDataMap() (map[string]map[string]string, error) {
-	cmc.RLock()
-	defer cmc.RUnlock()
-
 	hubMap := make(map[string]map[string]string)
 
 	indexer := cmc.CmInformer.Informer().GetIndexer()
@@ -173,9 +151,6 @@ func (cmc *ConfigMapController) GetAllHubsToDataMap() (map[string]map[string]str
 }
 
 func (cmc *ConfigMapController) GetHubData(hubName string) ([]map[string]string, error) {
-	cmc.RLock()
-	defer cmc.RUnlock()
-
 	indexer := cmc.CmInformer.Informer().GetIndexer()
 	objs, err := indexer.ByIndex(ByHub, hubName)
 	if err != nil {
