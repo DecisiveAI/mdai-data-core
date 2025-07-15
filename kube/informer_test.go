@@ -13,7 +13,7 @@ import (
 )
 
 func TestNewConfigMapController_SingleNs(t *testing.T) {
-	var logger *zap.Logger
+	logger := zap.NewNop()
 	ctx := t.Context()
 
 	configMap1 := &corev1.ConfigMap{
@@ -99,7 +99,7 @@ func TestNewConfigMapController_SingleNs(t *testing.T) {
 
 }
 func TestNewConfigMapController_MultipleNs(t *testing.T) {
-	var logger *zap.Logger
+	var logger = zap.NewNop()
 	ctx := t.Context()
 
 	configMap1 := &corev1.ConfigMap{
@@ -182,7 +182,7 @@ func TestNewConfigMapController_MultipleNs(t *testing.T) {
 
 }
 func TestNewConfigMapController_NonExistentCmType(t *testing.T) {
-	var logger *zap.Logger
+	var logger = zap.NewNop()
 
 	configMap1 := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
@@ -207,7 +207,7 @@ func TestNewConfigMapController_NonExistentCmType(t *testing.T) {
 }
 
 func TestGetHubData(t *testing.T) {
-	var logger *zap.Logger
+	var logger = zap.NewNop()
 	ctx := t.Context()
 	configMap := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
@@ -252,7 +252,7 @@ func TestGetHubData(t *testing.T) {
 }
 
 func TestGetAllHubsToDataMap(t *testing.T) {
-	var logger *zap.Logger
+	var logger = zap.NewNop()
 	ctx := t.Context()
 
 	configMap1 := &corev1.ConfigMap{
