@@ -3,7 +3,6 @@ package kube
 import (
 	"fmt"
 	"os"
-	"sync"
 	"time"
 
 	"go.uber.org/zap"
@@ -18,31 +17,41 @@ import (
 )
 
 const (
-	ByHub                      = "IndexByHub"
-	ManagedByMdaiOperatorLabel = "app.kubernetes.io/managed-by=mdai-operator"
-	EnvConfigMapType           = "hub-variables"
-	ManualEnvConfigMapType     = "hub-manual-variables"
-	AutomationConfigMapType    = "hub-automation"
-	LabelMdaiHubName           = "mydecisive.ai/hub-name"
-	ConfigMapTypeLabel         = "mydecisive.ai/configmap-type"
+	ByHub                   = "IndexByHub"
+	EnvConfigMapType        = "hub-variables"
+	ManualEnvConfigMapType  = "hub-manual-variables"
+	AutomationConfigMapType = "hub-automation"
+	LabelMdaiHubName        = "mydecisive.ai/hub-name"
+	ConfigMapTypeLabel      = "mydecisive.ai/configmap-type"
+)
+
+var (
+	errConfigMapCache    = fmt.Errorf("failed to populate ConfigMap cache")
+	errUnsupportedCmType = fmt.Errorf("unsupported ConfigMap type")
+	errNoHubNamLabel     = fmt.Errorf("ConfigMap does not have hub name label")
 )
 
 type ConfigMapController struct {
 	InformerFactory informers.SharedInformerFactory
 	CmInformer      coreinformers.ConfigMapInformer
-	Lock            sync.RWMutex
-	Namespace       string
-	ConfigMapType   string
+	namespace       string
+	configMapType   string
 	Logger          *zap.Logger
+	stopCh          chan struct{}
 }
 
-func (c *ConfigMapController) Run(stopCh chan struct{}) error {
-	c.InformerFactory.Start(stopCh)
+func (cmc *ConfigMapController) Run() error {
+	cmc.stopCh = make(chan struct{})
 
-	if !cache.WaitForCacheSync(stopCh, c.CmInformer.Informer().HasSynced) {
-		return fmt.Errorf("failed to sync")
+	cmc.InformerFactory.Start(cmc.stopCh)
+	if !cache.WaitForCacheSync(cmc.stopCh, cmc.CmInformer.Informer().HasSynced) {
+		return errConfigMapCache
 	}
 	return nil
+}
+
+func (cmc *ConfigMapController) Stop() {
+	close(cmc.stopCh)
 }
 
 func NewConfigMapController(configMapType string, namespace string, clientset kubernetes.Interface, logger *zap.Logger) (*ConfigMapController, error) {
@@ -61,7 +70,7 @@ func NewConfigMapController(configMapType string, namespace string, clientset ku
 			}),
 		)
 	default:
-		return nil, fmt.Errorf("unsupported ConfigMap type")
+		return nil, errUnsupportedCmType
 	}
 
 	cmInformer := informerFactory.Core().V1().ConfigMaps()
@@ -83,8 +92,8 @@ func NewConfigMapController(configMapType string, namespace string, clientset ku
 	}
 
 	c := &ConfigMapController{
-		Namespace:       namespace,
-		ConfigMapType:   configMapType,
+		namespace:       namespace,
+		configMapType:   configMapType,
 		InformerFactory: informerFactory,
 		CmInformer:      cmInformer,
 		Logger:          logger,
@@ -97,7 +106,7 @@ func getHubName(configMap *v1.ConfigMap) (string, error) {
 	if hubName, ok := configMap.Labels[LabelMdaiHubName]; ok {
 		return hubName, nil
 	}
-	return "", fmt.Errorf("ConfigMap does not have hub name label")
+	return "", errNoHubNamLabel
 }
 
 func NewK8sClient(logger *zap.Logger) (kubernetes.Interface, error) {
@@ -116,4 +125,45 @@ func NewK8sClient(logger *zap.Logger) (kubernetes.Interface, error) {
 		}
 	}
 	return kubernetes.NewForConfig(config)
+}
+
+func (cmc *ConfigMapController) GetAllHubsToDataMap() (map[string]map[string]string, error) {
+	hubMap := make(map[string]map[string]string)
+
+	indexer := cmc.CmInformer.Informer().GetIndexer()
+	hubNames := indexer.ListIndexFuncValues(ByHub)
+	for _, hubName := range hubNames {
+		objs, err := indexer.ByIndex(ByHub, hubName)
+		if err != nil {
+			cmc.Logger.Error("Failed to get hub ConfigMaps", zap.String("Hub name", hubName), zap.Error(err))
+			continue
+		}
+		for _, obj := range objs {
+			cm, ok := obj.(*v1.ConfigMap)
+			if !ok {
+				cmc.Logger.Error("Failed to deserialize data to ConfigMap", zap.String("Hub name", hubName), zap.Error(err))
+				continue
+			}
+			hubMap[hubName] = cm.Data
+		}
+	}
+	return hubMap, nil
+}
+
+func (cmc *ConfigMapController) GetHubData(hubName string) ([]map[string]string, error) {
+	indexer := cmc.CmInformer.Informer().GetIndexer()
+	objs, err := indexer.ByIndex(ByHub, hubName)
+	if err != nil {
+		return nil, fmt.Errorf("getting hub by index: %w", err)
+	}
+	result := make([]map[string]string, 0, len(objs))
+	for _, obj := range objs {
+		cm, ok := obj.(*v1.ConfigMap)
+		if !ok {
+			cmc.Logger.Error("Failed to deserialize data to ConfigMap", zap.Error(err))
+			continue
+		}
+		result = append(result, cm.Data)
+	}
+	return result, nil
 }
