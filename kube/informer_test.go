@@ -205,3 +205,124 @@ func TestNewConfigMapController_NonExistentCmType(t *testing.T) {
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "unsupported ConfigMap type")
 }
+
+func TestGetHubData(t *testing.T) {
+	var logger *zap.Logger
+	ctx := t.Context()
+	configMap := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "mdaihub-first-manual-variables",
+			Namespace: "first",
+			Labels: map[string]string{
+				ConfigMapTypeLabel: ManualEnvConfigMapType,
+				LabelMdaiHubName:   "mdaihub-first",
+			},
+		},
+		Data: map[string]string{
+			"first_manual_variable":  "boolean",
+			"second_manual_variable": "string",
+		},
+	}
+	clientset := fake.NewClientset(configMap)
+
+	cmController, err := NewConfigMapController(ManualEnvConfigMapType, "first", clientset, logger)
+	if err != nil {
+		logger.Fatal("failed to create ConfigMap controller", zap.Error(err))
+	}
+
+	err = cmController.Run()
+	defer cmController.Stop()
+	if err != nil {
+		logger.Fatal("failed to run ConfigMap controller", zap.Error(err))
+	}
+
+	_, _ = clientset.CoreV1().ConfigMaps("first").Create(ctx, configMap, metav1.CreateOptions{})
+	time.Sleep(100 * time.Millisecond)
+
+	expectedHubData := []map[string]string{
+		{
+			"first_manual_variable":  "boolean",
+			"second_manual_variable": "string",
+		},
+	}
+
+	hubData, err := cmController.GetHubData("mdaihub-first")
+	assert.Nil(t, err)
+	assert.Equal(t, expectedHubData, hubData)
+}
+
+func TestGetAllHubsToDataMap(t *testing.T) {
+	var logger *zap.Logger
+	ctx := t.Context()
+
+	configMap1 := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "mdaihub-first-manual-variables",
+			Namespace: "first",
+			Labels: map[string]string{
+				ConfigMapTypeLabel: ManualEnvConfigMapType,
+				LabelMdaiHubName:   "mdaihub-first",
+			},
+		},
+		Data: map[string]string{
+			"first_manual_variable": "boolean",
+		},
+	}
+	configMap2 := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "mdaihub-second-manual-variables",
+			Namespace: "second",
+			Labels: map[string]string{
+				ConfigMapTypeLabel: ManualEnvConfigMapType,
+				LabelMdaiHubName:   "mdaihub-second",
+			},
+		},
+		Data: map[string]string{
+			"second_manual_variable": "string",
+		},
+	}
+	configMap3 := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "mdaihub-third-manual-variables",
+			Namespace: "second",
+			Labels: map[string]string{
+				ConfigMapTypeLabel: ManualEnvConfigMapType,
+				LabelMdaiHubName:   "mdaihub-third",
+			},
+		},
+		Data: map[string]string{
+			"third_manual_variable": "string",
+		},
+	}
+
+	clientset := fake.NewClientset(configMap1, configMap2, configMap3)
+
+	cmController, err := NewConfigMapController(ManualEnvConfigMapType, "second", clientset, logger)
+	if err != nil {
+		logger.Fatal("failed to create ConfigMap controller", zap.Error(err))
+	}
+
+	err = cmController.Run()
+	defer cmController.Stop()
+	if err != nil {
+		logger.Fatal("failed to run ConfigMap controller", zap.Error(err))
+	}
+
+	_, _ = clientset.CoreV1().ConfigMaps("first").Create(ctx, configMap1, metav1.CreateOptions{})
+	_, _ = clientset.CoreV1().ConfigMaps("second").Create(ctx, configMap2, metav1.CreateOptions{})
+	_, _ = clientset.CoreV1().ConfigMaps("second").Create(ctx, configMap3, metav1.CreateOptions{})
+	time.Sleep(100 * time.Millisecond)
+
+	expectedHubData := map[string]map[string]string{
+		"mdaihub-second": {
+			"second_manual_variable": "string",
+		},
+		"mdaihub-third": {
+			"third_manual_variable": "string",
+		},
+	}
+
+	hubData, err := cmController.GetAllHubsToDataMap()
+	assert.Nil(t, err)
+	assert.Equal(t, expectedHubData, hubData)
+}
