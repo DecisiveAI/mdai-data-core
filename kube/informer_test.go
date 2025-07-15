@@ -59,15 +59,11 @@ func TestNewConfigMapController_SingleNs(t *testing.T) {
 	clientset := fake.NewClientset(configMap1, configMap2, configMap3)
 
 	cmController, err := NewConfigMapController(ManualEnvConfigMapType, "second", clientset, logger)
-	if err != nil {
-		logger.Fatal("failed to create ConfigMap controller", zap.Error(err))
-	}
+	require.NoError(t, err)
 
 	err = cmController.Run()
+	require.NoError(t, err)
 	defer cmController.Stop()
-	if err != nil {
-		logger.Fatal("failed to run ConfigMap controller", zap.Error(err))
-	}
 
 	_, _ = clientset.CoreV1().ConfigMaps("first").Create(ctx, configMap1, metav1.CreateOptions{})
 	_, _ = clientset.CoreV1().ConfigMaps("second").Create(ctx, configMap2, metav1.CreateOptions{})
@@ -226,15 +222,11 @@ func TestGetHubData(t *testing.T) {
 	clientset := fake.NewClientset(configMap)
 
 	cmController, err := NewConfigMapController(ManualEnvConfigMapType, "first", clientset, logger)
-	if err != nil {
-		logger.Fatal("failed to create ConfigMap controller", zap.Error(err))
-	}
+	require.NoError(t, err)
 
 	err = cmController.Run()
+	require.NoError(t, err)
 	defer cmController.Stop()
-	if err != nil {
-		logger.Fatal("failed to run ConfigMap controller", zap.Error(err))
-	}
 
 	_, _ = clientset.CoreV1().ConfigMaps("first").Create(ctx, configMap, metav1.CreateOptions{})
 	time.Sleep(100 * time.Millisecond)
@@ -246,9 +238,13 @@ func TestGetHubData(t *testing.T) {
 		},
 	}
 
-	hubData, err := cmController.GetHubData("mdaihub-first")
-	assert.Nil(t, err)
-	assert.Equal(t, expectedHubData, hubData)
+	assert.Eventually(t, func() bool {
+		hubData, err := cmController.GetHubData("mdaihub-first")
+		if err != nil {
+			return false
+		}
+		return assert.ObjectsAreEqual(expectedHubData, hubData)
+	}, time.Second, 100*time.Millisecond, "Expected hub data to eventually match")
 }
 
 func TestGetAllHubsToDataMap(t *testing.T) {
@@ -298,15 +294,11 @@ func TestGetAllHubsToDataMap(t *testing.T) {
 	clientset := fake.NewClientset(configMap1, configMap2, configMap3)
 
 	cmController, err := NewConfigMapController(ManualEnvConfigMapType, "second", clientset, logger)
-	if err != nil {
-		logger.Fatal("failed to create ConfigMap controller", zap.Error(err))
-	}
+	require.NoError(t, err)
 
 	err = cmController.Run()
+	require.NoError(t, err)
 	defer cmController.Stop()
-	if err != nil {
-		logger.Fatal("failed to run ConfigMap controller", zap.Error(err))
-	}
 
 	_, _ = clientset.CoreV1().ConfigMaps("first").Create(ctx, configMap1, metav1.CreateOptions{})
 	_, _ = clientset.CoreV1().ConfigMaps("second").Create(ctx, configMap2, metav1.CreateOptions{})
@@ -322,7 +314,11 @@ func TestGetAllHubsToDataMap(t *testing.T) {
 		},
 	}
 
-	hubData, err := cmController.GetAllHubsToDataMap()
-	assert.Nil(t, err)
-	assert.Equal(t, expectedHubData, hubData)
+	assert.Eventually(t, func() bool {
+		hubData, err := cmController.GetAllHubsToDataMap()
+		if err != nil {
+			return false
+		}
+		return assert.ObjectsAreEqual(expectedHubData, hubData)
+	}, time.Second, 100*time.Millisecond, "Expected hub data to eventually match")
 }
