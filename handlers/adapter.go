@@ -133,13 +133,14 @@ type StoreVariableAction struct {
 func (action StoreVariableAction) ToSequence() iter.Seq2[string, string] {
 	return func(yield func(K string, V string) bool) {
 		fields := map[string]string{
-			"timestamp":    time.Now().UTC().Format(time.RFC3339),
-			"hub_name":     action.HubName,
-			"event_id":     action.EventId,
-			"operation":    action.Operation,
-			"target":       action.Target,
-			"variable_ref": action.VariableRef,
-			"variable":     action.Variable,
+			"timestamp":      time.Now().UTC().Format(time.RFC3339),
+			"hub_name":       action.HubName,
+			"event_id":       action.EventId,
+			"operation":      action.Operation,
+			"target":         action.Target,
+			"variable_ref":   action.VariableRef,
+			"variable":       action.Variable,
+			"correlation_id": action.CorrelationId,
 		}
 
 		for key, value := range fields {
