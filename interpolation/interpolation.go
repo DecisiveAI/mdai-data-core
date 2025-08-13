@@ -17,6 +17,7 @@ type Error struct {
 	Message string
 	Scope   string
 	Field   string
+	Value   interface{}
 }
 
 func (e *Error) Error() string {
@@ -30,7 +31,7 @@ type Engine struct {
 }
 
 func NewEngine(logger *zap.Logger) *Engine {
-	pattern := regexp.MustCompile(`\$\{([^:]+):([^}:-]+)(?::-([^}]*))?\}`)
+	pattern := regexp.MustCompile(`\$\{([^:]+):([^}:-]+)(?::-([^}]*))?}`)
 	return &Engine{
 		pattern: pattern,
 		logger:  logger,
@@ -38,29 +39,25 @@ func NewEngine(logger *zap.Logger) *Engine {
 }
 
 // Interpolate processes a string and replaces interpolation expressions with actual values
-func (e *Engine) Interpolate(input string, event *eventing.MdaiEvent) (string, error) {
+func (e *Engine) Interpolate(input string, event *eventing.MdaiEvent) string {
 	result := e.pattern.ReplaceAllStringFunc(input, func(match string) string {
-		replacement, err := e.replaceMatch(match, event)
-		if err != nil {
-			e.logger.Error("interpolation failed",
-				zap.String("match", match),
-				zap.String("scope", err.Scope),
-				zap.String("field", err.Field),
-				zap.String("error", err.Message))
-			return match
-		}
+		replacement := e.replaceMatch(match, event)
+
 		return replacement
 	})
 
-	return result, nil
+	return result
 }
 
 // replaceMatch processes a single interpolation match
-func (e *Engine) replaceMatch(match string, event *eventing.MdaiEvent) (string, *Error) {
-	// Extract scope, field and default value
+func (e *Engine) replaceMatch(match string, event *eventing.MdaiEvent) string {
 	matches := e.pattern.FindStringSubmatch(match)
 	if len(matches) < 3 {
-		return match, nil
+		e.logger.Error("failed to match regex, missing required elements",
+			zap.Bool("interpolation made", false),
+			zap.String("match", match),
+		)
+		return match
 	}
 
 	scope := strings.TrimSpace(matches[1])
@@ -71,26 +68,44 @@ func (e *Engine) replaceMatch(match string, event *eventing.MdaiEvent) (string, 
 	}
 
 	if scope != "trigger" {
-		return "", &Error{
-			Message: fmt.Sprintf("unsupported scope '%s' - only 'trigger' scope is currently supported", scope),
-			Scope:   scope,
-			Field:   field,
-		}
+		e.logger.Error(fmt.Sprintf("unsupported scope '%s' - only 'trigger' scope is currently supported", scope),
+			zap.Bool("interpolation made", false),
+			zap.String("match", match),
+			zap.String("scope", scope),
+			zap.String("field", field),
+		)
+		return match
 	}
 
 	value, found := e.getFieldValue(field, event)
 	if !found {
 		if defaultValue != "" {
-			return defaultValue, nil
+			e.logger.Warn(fmt.Sprintf("field '%s' not found, using default value provided", field),
+				zap.Bool("interpolation made", true),
+				zap.String("match", match),
+				zap.String("scope", scope),
+				zap.String("field", field),
+				zap.String("defaultValue", defaultValue),
+			)
+			return defaultValue
 		}
-		return "", &Error{
-			Message: fmt.Sprintf("field '%s' not found and no default value provided", field),
-			Scope:   scope,
-			Field:   field,
-		}
+		e.logger.Error(fmt.Sprintf("field '%s' not found and no default value provided", field),
+			zap.Bool("interpolation made", false),
+			zap.String("match", match),
+			zap.String("scope", scope),
+			zap.String("field", field),
+		)
+		return match
 	}
 
-	return value, nil
+	e.logger.Info("interpolation succeeded",
+		zap.Bool("interpolation made", true),
+		zap.String("match", match),
+		zap.String("scope", scope),
+		zap.String("field", field),
+		zap.String("value", fmt.Sprintf("%v", value)),
+	)
+	return value
 }
 
 func (e *Engine) getFieldValue(field string, event *eventing.MdaiEvent) (string, bool) {
