@@ -38,11 +38,11 @@ func NewEngine(logger *zap.Logger) *Engine {
 }
 
 // Interpolate processes a string and replaces interpolation expressions with actual values
-func (ie *Engine) Interpolate(input string, event *eventing.MdaiEvent) (string, error) {
-	result := ie.pattern.ReplaceAllStringFunc(input, func(match string) string {
-		replacement, err := ie.replaceMatch(match, event)
+func (e *Engine) Interpolate(input string, event *eventing.MdaiEvent) (string, error) {
+	result := e.pattern.ReplaceAllStringFunc(input, func(match string) string {
+		replacement, err := e.replaceMatch(match, event)
 		if err != nil {
-			ie.logger.Error("interpolation failed",
+			e.logger.Error("interpolation failed",
 				zap.String("match", match),
 				zap.String("scope", err.Scope),
 				zap.String("field", err.Field),
@@ -56,9 +56,9 @@ func (ie *Engine) Interpolate(input string, event *eventing.MdaiEvent) (string, 
 }
 
 // replaceMatch processes a single interpolation match
-func (ie *Engine) replaceMatch(match string, event *eventing.MdaiEvent) (string, *Error) {
+func (e *Engine) replaceMatch(match string, event *eventing.MdaiEvent) (string, *Error) {
 	// Extract scope, field and default value
-	matches := ie.pattern.FindStringSubmatch(match)
+	matches := e.pattern.FindStringSubmatch(match)
 	if len(matches) < 3 {
 		return match, nil
 	}
@@ -78,7 +78,7 @@ func (ie *Engine) replaceMatch(match string, event *eventing.MdaiEvent) (string,
 		}
 	}
 
-	value, found := ie.getFieldValue(field, event)
+	value, found := e.getFieldValue(field, event)
 	if !found {
 		if defaultValue != "" {
 			return defaultValue, nil
@@ -93,7 +93,7 @@ func (ie *Engine) replaceMatch(match string, event *eventing.MdaiEvent) (string,
 	return value, nil
 }
 
-func (ie *Engine) getFieldValue(field string, event *eventing.MdaiEvent) (string, bool) {
+func (e *Engine) getFieldValue(field string, event *eventing.MdaiEvent) (string, bool) {
 	if event == nil {
 		return "", false
 	}
@@ -125,13 +125,13 @@ func (ie *Engine) getFieldValue(field string, event *eventing.MdaiEvent) (string
 	}
 
 	if strings.HasPrefix(field, "payload.") {
-		return ie.getPayloadValue(strings.TrimPrefix(field, "payload."), event)
+		return e.getPayloadValue(strings.TrimPrefix(field, "payload."), event)
 	}
 
 	return "", false
 }
 
-func (ie *Engine) getPayloadValue(field string, event *eventing.MdaiEvent) (string, bool) {
+func (e *Engine) getPayloadValue(field string, event *eventing.MdaiEvent) (string, bool) {
 	if event.Payload == "" {
 		return "", false
 	}
@@ -141,15 +141,15 @@ func (ie *Engine) getPayloadValue(field string, event *eventing.MdaiEvent) (stri
 		return "", false
 	}
 
-	value, found := ie.getNestedValue(payloadMap, field)
+	value, found := e.getNestedValue(payloadMap, field)
 	if !found {
 		return "", false
 	}
 
-	return ie.convertToString(value), true
+	return e.convertToString(value), true
 }
 
-func (ie *Engine) getNestedValue(data map[string]interface{}, path string) (interface{}, bool) {
+func (e *Engine) getNestedValue(data map[string]interface{}, path string) (interface{}, bool) {
 	parts := strings.Split(path, ".")
 	current := data
 
@@ -173,7 +173,7 @@ func (ie *Engine) getNestedValue(data map[string]interface{}, path string) (inte
 	return nil, false
 }
 
-func (ie *Engine) convertToString(value interface{}) string {
+func (e *Engine) convertToString(value interface{}) string {
 	if value == nil {
 		return ""
 	}
