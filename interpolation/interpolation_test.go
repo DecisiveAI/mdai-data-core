@@ -135,11 +135,7 @@ func TestEngine_Interpolate(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := engine.Interpolate(tt.input, tt.event)
-			if err != nil {
-				t.Errorf("Interpolate() error = %v", err)
-				return
-			}
+			result := engine.Interpolate(tt.input, tt.event)
 			if result != tt.expected {
 				t.Errorf("Interpolate() = %v, want %v", result, tt.expected)
 			}
@@ -201,11 +197,7 @@ func TestEngine_ComplexPayloadValues(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := engine.Interpolate(tt.input, event)
-			if err != nil {
-				t.Errorf("Interpolate() error = %v", err)
-				return
-			}
+			result := engine.Interpolate(tt.input, event)
 			if result != tt.expected {
 				t.Errorf("Interpolate() = %v, want %v", result, tt.expected)
 			}
@@ -256,11 +248,7 @@ func TestEngine_EventFieldsWithEmptyValues(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := engine.Interpolate(tt.input, event)
-			if err != nil {
-				t.Errorf("Interpolate() error = %v", err)
-				return
-			}
+			result := engine.Interpolate(tt.input, event)
 			if result != tt.expected {
 				t.Errorf("Interpolate() = %v, want %v", result, tt.expected)
 			}
@@ -306,11 +294,7 @@ func TestEngine_ErrorLogging(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := engine.Interpolate(tt.input, event)
-			if err != nil {
-				t.Errorf("Interpolate() should not return error, got %v", err)
-			}
-
+			result := engine.Interpolate(tt.input, event)
 			if tt.expectedError {
 				// Should return original input when error is logged
 				if result != tt.input {
@@ -353,11 +337,7 @@ func TestEngine_NestedPayloadMissingPath(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := engine.Interpolate(tt.input, event)
-			if err != nil {
-				t.Errorf("Interpolate() error = %v", err)
-				return
-			}
+			result := engine.Interpolate(tt.input, event)
 			if result != tt.expected {
 				t.Errorf("Interpolate() = %v, want %v", result, tt.expected)
 			}
@@ -408,11 +388,7 @@ func TestEngine_EventFieldsOnly(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := engine.Interpolate(tt.input, event)
-			if err != nil {
-				t.Errorf("Interpolate() error = %v", err)
-				return
-			}
+			result := engine.Interpolate(tt.input, event)
 			if result != tt.expected {
 				t.Errorf("Interpolate() = %v, want %v", result, tt.expected)
 			}
@@ -429,12 +405,7 @@ func TestEngine_PayloadRawField(t *testing.T) {
 		Payload: payloadContent,
 	}
 
-	result, err := engine.Interpolate("Raw: ${trigger:payload}", event)
-	if err != nil {
-		t.Errorf("Interpolate() error = %v", err)
-		return
-	}
-
+	result := engine.Interpolate("Raw: ${trigger:payload}", event)
 	expected := "Raw: " + payloadContent
 	if result != expected {
 		t.Errorf("Interpolate() = %v, want %v", result, expected)
