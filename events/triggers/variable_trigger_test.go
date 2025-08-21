@@ -67,3 +67,8 @@ func TestVariableTriggerMarshalLogObject_OmitsOptional(t *testing.T) {
 func TestVariableTriggerKind(t *testing.T) {
 	assert.Equal(t, KindVariable, (&VariableTrigger{}).Kind())
 }
+
+func TestVariableTriggerMatch_EmptyName_NoMatch(t *testing.T) {
+	ctx := Context{Variable: &VariableCtx{Name: "cpu", UpdateType: "set"}}
+	assert.False(t, (&VariableTrigger{}).Match(ctx))
+}
