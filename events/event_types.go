@@ -42,9 +42,6 @@ func (r *Rule) UnmarshalJSON(data []byte) error {
 	if err != nil {
 		return fmt.Errorf("trigger: %w", err)
 	}
-	if trigger == nil {
-		return fmt.Errorf("trigger: nil")
-	}
 
 	r.Name = wire.Name
 	r.Trigger = trigger // store pointer so only one assertion path later
