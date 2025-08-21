@@ -98,8 +98,7 @@ func (r Rule) MarshalJSON() ([]byte, error) {
 	return json.Marshal(wire)
 }
 
-//////////////////// CommandEvent struct for workflow engine integration
-
+// CommandEvent struct for workflow engine integration
 type CommandEvent struct {
 	Id              string                 `json:"id"`
 	Source          string                 `json:"source"`
