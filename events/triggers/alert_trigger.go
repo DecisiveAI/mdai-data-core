@@ -15,6 +15,10 @@ type AlertTrigger struct {
 }
 
 func (t *AlertTrigger) Match(ctx Context) bool {
+	// Alert Name is required; reject empty triggers
+	if t.Name == "" {
+		return false
+	}
 	a := ctx.Alert
 	if a == nil {
 		return false
