@@ -8,6 +8,15 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+type wireForTest struct {
+	Name    string `json:"name"`
+	Trigger struct {
+		Kind string          `json:"kind"`
+		Spec json.RawMessage `json:"spec"`
+	} `json:"trigger"`
+	Commands []Command `json:"commands"`
+}
+
 func TestRule_UnmarshalJSON_AlertOK(t *testing.T) {
 	js := []byte(`{
 		"name":"r1",
@@ -91,14 +100,7 @@ func TestRule_MarshalJSON_AlertOK(t *testing.T) {
 	out, err := json.Marshal(r)
 	assert.NoError(t, err)
 
-	var wire struct {
-		Name    string `json:"name"`
-		Trigger struct {
-			Kind string          `json:"kind"`
-			Spec json.RawMessage `json:"spec"`
-		} `json:"trigger"`
-		Commands []Command `json:"commands"`
-	}
+	var wire = wireForTest{}
 	assert.NoError(t, json.Unmarshal(out, &wire))
 	assert.Equal(t, "r1", wire.Name)
 	assert.Equal(t, "alert", wire.Trigger.Kind)
@@ -118,12 +120,7 @@ func TestRule_MarshalJSON_VariableOK(t *testing.T) {
 	out, err := json.Marshal(r)
 	assert.NoError(t, err)
 
-	var wire struct {
-		Trigger struct {
-			Kind string          `json:"kind"`
-			Spec json.RawMessage `json:"spec"`
-		} `json:"trigger"`
-	}
+	var wire = wireForTest{}
 	assert.NoError(t, json.Unmarshal(out, &wire))
 	assert.Equal(t, "variable", wire.Trigger.Kind)
 

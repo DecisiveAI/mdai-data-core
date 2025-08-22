@@ -4,16 +4,21 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
+// AlertCtx represents contextual information for alert-related events. It's used in matching rules.'
 type AlertCtx struct {
 	Name   string
 	Status string // "firing" | "resolved"
 }
 
+// AlertTrigger matches events based on alert name and status.
 type AlertTrigger struct {
-	Name   string `json:"name,omitempty"`   // exact; "" = any
-	Status string `json:"status,omitempty"` // exact; "" = any
+	// Name is required by Match; empty names do not match.
+	Name string `json:"name,omitempty"`
+	// Status is optional; when empty, status is ignored.
+	Status string `json:"status,omitempty"`
 }
 
+// Match checks if the trigger matches the given context.
 func (t *AlertTrigger) Match(ctx Context) bool {
 	// Alert Name is required; reject empty triggers
 	if t.Name == "" {
@@ -32,6 +37,7 @@ func (t *AlertTrigger) Match(ctx Context) bool {
 	return true
 }
 
+// MarshalLogObject encodes the trigger as a log object.
 func (t *AlertTrigger) MarshalLogObject(enc zapcore.ObjectEncoder) error {
 	enc.AddString("kind", "alert")
 	if t.Name != "" {
@@ -43,4 +49,5 @@ func (t *AlertTrigger) MarshalLogObject(enc zapcore.ObjectEncoder) error {
 	return nil
 }
 
+// Kind returns the kind of trigger.
 func (t *AlertTrigger) Kind() string { return KindAlert }

@@ -9,46 +9,62 @@ import (
 	"github.com/decisiveai/mdai-data-core/events/triggers"
 )
 
+// Rules represents a collection of rules.
 type Rules struct {
 	Rules []Rule `json:"rules"`
 }
 
+// Rule represents a rule that triggers a set of commands when a certain event occurs.
 type Rule struct {
 	Name     string           `json:"name"`
 	Trigger  triggers.Trigger `json:"-"` // not part of wire shape; handled by custom (un)marshal
 	Commands []Command        `json:"commands"`
 }
 
+// Command represents a single command to be executed when a rule is triggered.
 type Command struct {
-	Type   string                 `json:"type"`             // e.g., variable.set.add, webhook.call
-	Inputs map[string]interface{} `json:"inputs,omitempty"` // command-specific parameters
+	Type   string         `json:"type"`             // e.g., variable.set.add, webhook.call
+	Inputs map[string]any `json:"inputs,omitempty"` // command-specific parameters
 }
 
-type ruleWire struct {
+type ruleWireOut struct {
 	Name     string          `json:"name"`
 	Trigger  json.RawMessage `json:"trigger"`
 	Commands []Command       `json:"commands"`
 }
 
+// UnmarshalJSON unmarshals the Rule from JSON.
 func (r *Rule) UnmarshalJSON(data []byte) error {
-	var wire ruleWire
+	var wire ruleWireOut
 	dec := json.NewDecoder(bytes.NewReader(data))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(&wire); err != nil {
 		return err
 	}
 
-	trigger, err := triggers.BuildTrigger(wire.Trigger) // returns *AlertTrigger or *VariableTrigger
+	trigger, err := triggers.BuildTrigger(wire.Trigger)
 	if err != nil {
 		return fmt.Errorf("trigger: %w", err)
 	}
 
 	r.Name = wire.Name
-	r.Trigger = trigger // store pointer so only one assertion path later
+	r.Trigger = trigger
 	r.Commands = wire.Commands
 	return nil
 }
 
+type triggerEnvelope struct {
+	Kind string `json:"kind"`
+	Spec any    `json:"spec"`
+}
+
+type ruleWireIn struct {
+	Name     string          `json:"name"`
+	Trigger  triggerEnvelope `json:"trigger"`
+	Commands []Command       `json:"commands"`
+}
+
+// MarshalJSON marshals the Rule into JSON.
 func (r Rule) MarshalJSON() ([]byte, error) {
 	if r.Trigger == nil {
 		return nil, fmt.Errorf("rule %q: missing trigger", r.Name)
@@ -68,23 +84,11 @@ func (r Rule) MarshalJSON() ([]byte, error) {
 			return nil, fmt.Errorf("rule %q: nil variable trigger", r.Name)
 		}
 		spec = t
-	// add other trigger kinds here (e.g., *triggers.WindowTrigger)
 	default:
 		return nil, fmt.Errorf("rule %q: unsupported trigger kind %q", r.Name, kind)
 	}
 
-	// Wire shape we want in the ConfigMap value
-	type triggerEnvelope struct {
-		Kind string `json:"kind"`
-		Spec any    `json:"spec"`
-	}
-	type ruleWire struct {
-		Name     string          `json:"name"`
-		Trigger  triggerEnvelope `json:"trigger"`
-		Commands []Command       `json:"commands"`
-	}
-
-	wire := ruleWire{
+	wire := ruleWireIn{
 		Name: r.Name,
 		Trigger: triggerEnvelope{
 			Kind: kind,
