@@ -167,3 +167,22 @@ func (cmc *ConfigMapController) GetHubData(hubName string) ([]map[string]string,
 	}
 	return result, nil
 }
+
+// GetConfigMapByHubName returns the first ConfigMap found for the given hub name.
+// This function assumes that the ConfigMaps of certain type filtered by label are unique per hub.
+func (cmc *ConfigMapController) GetConfigMapByHubName(hubName string) (*v1.ConfigMap, error) {
+	indexer := cmc.CmInformer.Informer().GetIndexer()
+	objs, err := indexer.ByIndex(ByHub, hubName)
+	if err != nil {
+		return nil, fmt.Errorf("getting hub by index: %w", err)
+	}
+	if len(objs) > 1 {
+		return nil, fmt.Errorf("multiple ConfigMaps found for the same hub: %s", hubName)
+	}
+	cm, ok := objs[0].(*v1.ConfigMap)
+	if !ok {
+		return nil, fmt.Errorf("failed to deserialize data to ConfigMap, hub name: %s", hubName)
+	}
+
+	return cm, nil
+}
