@@ -89,11 +89,13 @@ func TestRule_UnmarshalJSON_UnknownTopLevelField(t *testing.T) {
 }
 
 func TestRule_MarshalJSON_AlertOK(t *testing.T) {
+	in := map[string]string{"k": "v"}
+	inRaw, _ := json.Marshal(in)
 	r := Rule{
 		Name:    "r1",
 		Trigger: &triggers.AlertTrigger{Name: "db_down", Status: "firing"},
 		Commands: []Command{
-			{Type: "variable.set", Inputs: map[string]any{"k": "v"}},
+			{Type: "variable.set", Inputs: json.RawMessage(inRaw)},
 		},
 	}
 
@@ -109,7 +111,13 @@ func TestRule_MarshalJSON_AlertOK(t *testing.T) {
 	assert.NoError(t, json.Unmarshal(wire.Trigger.Spec, &spec))
 	assert.Equal(t, "db_down", spec.Name)
 	assert.Equal(t, "firing", spec.Status)
+
 	assert.Len(t, wire.Commands, 1)
+	assert.Equal(t, "variable.set", wire.Commands[0].Type)
+
+	var got map[string]string
+	assert.NoError(t, json.Unmarshal(wire.Commands[0].Inputs, &got))
+	assert.Equal(t, "v", got["k"])
 }
 
 func TestRule_MarshalJSON_VariableOK(t *testing.T) {
