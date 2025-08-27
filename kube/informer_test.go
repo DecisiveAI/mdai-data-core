@@ -391,7 +391,6 @@ func TestGetConfigMapByHubName_MultipleFound(t *testing.T) {
 
 	_, _ = clientset.CoreV1().ConfigMaps("first").Create(ctx, configMap1, metav1.CreateOptions{})
 	_, _ = clientset.CoreV1().ConfigMaps("first").Create(ctx, configMap2, metav1.CreateOptions{})
-	time.Sleep(100 * time.Millisecond)
 
 	assert.Eventually(t, func() bool {
 		cm, err := cmController.GetConfigMapByHubName(hubName)
