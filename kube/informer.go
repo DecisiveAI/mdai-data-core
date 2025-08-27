@@ -176,8 +176,11 @@ func (cmc *ConfigMapController) GetConfigMapByHubName(hubName string) (*v1.Confi
 	if err != nil {
 		return nil, fmt.Errorf("getting hub by index: %w", err)
 	}
+	if len(objs) == 0 {
+		return nil, fmt.Errorf("no ConfigMap %s found for hub: %s", cmc.configMapType, hubName)
+	}
 	if len(objs) > 1 {
-		return nil, fmt.Errorf("multiple ConfigMaps found for the same hub: %s", hubName)
+		return nil, fmt.Errorf("multiple ConfigMaps %s found for the same hub: %s", cmc.configMapType, hubName)
 	}
 	cm, ok := objs[0].(*v1.ConfigMap)
 	if !ok {
