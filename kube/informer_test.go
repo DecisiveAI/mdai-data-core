@@ -245,6 +245,14 @@ func TestGetHubData(t *testing.T) {
 		}
 		return assert.ObjectsAreEqual(expectedHubData, hubData)
 	}, time.Second, 100*time.Millisecond, "Expected hub data to eventually match")
+
+	assert.Eventually(t, func() bool {
+		cm, err := cmController.GetConfigMapByHubName("mdaihub-first")
+		if err != nil {
+			return false
+		}
+		return assert.ObjectsAreEqual(configMap, cm)
+	}, time.Second, 100*time.Millisecond, "Expected hub data to eventually match")
 }
 
 func TestGetAllHubsToDataMap(t *testing.T) {
@@ -321,4 +329,77 @@ func TestGetAllHubsToDataMap(t *testing.T) {
 		}
 		return assert.ObjectsAreEqual(expectedHubData, hubData)
 	}, time.Second, 100*time.Millisecond, "Expected hub data to eventually match")
+}
+
+func TestGetConfigMapByHubName_NotFound(t *testing.T) {
+	var logger = zap.NewNop()
+	clientset := fake.NewClientset()
+
+	cmController, err := NewConfigMapController(ManualEnvConfigMapType, "first", clientset, logger)
+	require.NoError(t, err)
+
+	err = cmController.Run()
+	require.NoError(t, err)
+	defer cmController.Stop()
+
+	assert.Eventually(t, func() bool {
+		cm, err := cmController.GetConfigMapByHubName("non-existent-hub")
+		if cm != nil {
+			return false
+		}
+		if err == nil {
+			return false
+		}
+		return assert.Contains(t, err.Error(), "no ConfigMap hub-manual-variables found for hub: non-existent-hub")
+	}, time.Second, 100*time.Millisecond, "Expected error for non-existent hub")
+}
+
+func TestGetConfigMapByHubName_MultipleFound(t *testing.T) {
+	var logger = zap.NewNop()
+	ctx := t.Context()
+	const hubName = "shared-hub"
+
+	configMap1 := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "mdaihub-first-manual-variables",
+			Namespace: "first",
+			Labels: map[string]string{
+				ConfigMapTypeLabel: ManualEnvConfigMapType,
+				LabelMdaiHubName:   hubName,
+			},
+		},
+	}
+	configMap2 := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "mdaihub-second-manual-variables",
+			Namespace: "first",
+			Labels: map[string]string{
+				ConfigMapTypeLabel: ManualEnvConfigMapType,
+				LabelMdaiHubName:   hubName,
+			},
+		},
+	}
+
+	clientset := fake.NewClientset(configMap1, configMap2)
+
+	cmController, err := NewConfigMapController(ManualEnvConfigMapType, "first", clientset, logger)
+	require.NoError(t, err)
+
+	err = cmController.Run()
+	require.NoError(t, err)
+	defer cmController.Stop()
+
+	_, _ = clientset.CoreV1().ConfigMaps("first").Create(ctx, configMap1, metav1.CreateOptions{})
+	_, _ = clientset.CoreV1().ConfigMaps("first").Create(ctx, configMap2, metav1.CreateOptions{})
+
+	assert.Eventually(t, func() bool {
+		cm, err := cmController.GetConfigMapByHubName(hubName)
+		if cm != nil {
+			return false
+		}
+		if err == nil {
+			return false
+		}
+		return assert.Contains(t, err.Error(), "multiple ConfigMaps hub-manual-variables found for the same hub: shared-hub")
+	}, time.Second, 100*time.Millisecond, "Expected error for multiple config maps")
 }

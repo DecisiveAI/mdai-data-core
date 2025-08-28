@@ -23,8 +23,8 @@ type Rule struct {
 
 // Command represents a single command to be executed when a rule is triggered.
 type Command struct {
-	Type   string         `json:"type"`             // e.g., variable.set.add, webhook.call
-	Inputs map[string]any `json:"inputs,omitempty"` // command-specific parameters
+	Type   string          `json:"type"`   // e.g., variable.set.add, webhook.call
+	Inputs json.RawMessage `json:"inputs"` // command-specific parameters
 }
 
 type ruleWireOut struct {
