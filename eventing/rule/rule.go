@@ -1,4 +1,4 @@
-package events
+package rule
 
 import (
 	"bytes"
@@ -6,12 +6,12 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/decisiveai/mdai-data-core/events/triggers"
+	"github.com/decisiveai/mdai-data-core/eventing/triggers"
 )
 
-// Rules represents a collection of rules.
+// Rules represents a collection of rule.
 type Rules struct {
-	Rules []Rule `json:"rules"`
+	Rules []Rule `json:"rule"`
 }
 
 // Rule represents a rule that triggers a set of commands when a certain event occurs.
