@@ -60,7 +60,7 @@ func TestElasticGroupDelivery(t *testing.T) {
 	logger, err := zap.NewDevelopment()
 	require.NoError(t, err)
 
-	pub, err := NewPublisher(context.Background(), logger, "test")
+	pub, err := NewPublisher(t.Context(), logger, "test")
 	require.NoError(t, err)
 
 	want := map[string]int{
