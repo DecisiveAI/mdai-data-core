@@ -2,7 +2,9 @@ package audit
 
 import (
 	"context"
+	"fmt"
 	"iter"
+	"os"
 	"regexp"
 	"strconv"
 	"strings"
@@ -30,6 +32,10 @@ const (
 	Evaluation       = "evaluation"
 
 	MdaiHubEventHistoryStreamName = "mdai_hub_event_history"
+
+	envRetention      = "VALKEY_AUDIT_STREAM_RETENTION" // e.g. "30d", "72h", "2592000000ms"
+	envRetentionMsOld = "VALKEY_AUDIT_STREAM_EXPIRY_MS" // deprecated
+	defaultRetention  = 30 * 24 * time.Hour
 )
 
 type AuditAdapter struct {
@@ -41,12 +47,11 @@ type AuditAdapter struct {
 func NewAuditAdapter(
 	logger *zap.Logger,
 	valkeyClient valkey.Client,
-	valkeyAuditStreamExpiry time.Duration,
 ) *AuditAdapter {
 	return &AuditAdapter{
 		logger:                  logger,
 		valkeyClient:            valkeyClient,
-		valkeyAuditStreamExpiry: valkeyAuditStreamExpiry,
+		valkeyAuditStreamExpiry: getStreamRetention(logger),
 	}
 }
 
@@ -215,4 +220,59 @@ func (c *AuditAdapter) CreateRestartEvent(mdaiCRName string, envMap map[string]s
 
 func GetAuditLogTTLMinId(valkeyAuditStreamExpiry time.Duration) string {
 	return strconv.FormatInt(time.Now().Add(-valkeyAuditStreamExpiry).UnixMilli(), 10)
+}
+
+func getStreamRetention(logger *zap.Logger) time.Duration {
+	if s := os.Getenv(envRetention); s != "" {
+		d, err := parseHumanDuration(s)
+		if err != nil || d < 0 {
+			logger.Fatal("Invalid retention", zap.String("env", envRetention), zap.String("value", s), zap.Error(err))
+		}
+		logger.Info("Using custom Valkey stream retention", zap.String("env", envRetention), zap.Duration("retention", d))
+		return d
+	}
+
+	if s := os.Getenv(envRetentionMsOld); s != "" {
+		ms, err := strconv.ParseInt(s, 10, 64)
+		if err != nil || ms < 0 {
+			logger.Fatal("Invalid deprecated retention (ms)", zap.String("env", envRetentionMsOld), zap.String("value", s), zap.Error(err))
+		}
+		d := time.Duration(ms) * time.Millisecond
+		logger.Warn("VALKEY_AUDIT_STREAM_EXPIRY_MS is deprecated; use VALKEY_AUDIT_STREAM_RETENTION",
+			zap.Duration("retention", d))
+		return d
+	}
+
+	logger.Info("Using default Valkey stream retention", zap.Duration("retention", defaultRetention))
+	return defaultRetention
+}
+
+// parseHumanDuration accepts native Go durations ("72h", "90m", "100ms")
+// and also "d" (days) like "1d" or "2.5d".
+func parseHumanDuration(s string) (time.Duration, error) {
+	if s == "" {
+		return 0, fmt.Errorf("empty duration")
+	}
+	lower := strings.ToLower(s)
+	if strings.HasSuffix(lower, "d") {
+		num := strings.TrimSpace(lower[:len(lower)-1])
+		f, err := strconv.ParseFloat(num, 64)
+		if err != nil {
+			return 0, fmt.Errorf("invalid days %q: %w", s, err)
+		}
+		if f < 0 {
+			return 0, fmt.Errorf("negative duration not allowed: %s", s)
+		}
+		hours := strconv.FormatFloat(f*24.0, 'f', -1, 64) + "h"
+		return time.ParseDuration(hours)
+	}
+
+	d, err := time.ParseDuration(lower)
+	if err != nil {
+		return 0, err
+	}
+	if d < 0 {
+		return 0, fmt.Errorf("negative duration not allowed: %s", s)
+	}
+	return d, nil
 }

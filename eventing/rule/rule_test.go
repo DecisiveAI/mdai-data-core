@@ -1,10 +1,10 @@
-package events
+package rule
 
 import (
 	"encoding/json"
 	"testing"
 
-	"github.com/decisiveai/mdai-data-core/events/triggers"
+	"github.com/decisiveai/mdai-data-core/eventing/triggers"
 	"github.com/stretchr/testify/assert"
 )
 
