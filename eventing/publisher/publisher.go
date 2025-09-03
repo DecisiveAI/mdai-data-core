@@ -5,13 +5,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"time"
 
 	"github.com/decisiveai/mdai-data-core/eventing"
 	"github.com/decisiveai/mdai-data-core/eventing/config"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
-	"github.com/nats-io/nuid"
 	"go.uber.org/zap"
 )
 
@@ -27,7 +25,7 @@ type EventPublisher struct {
 	js     jetstream.JetStream
 }
 
-func NewPublisher(logger *zap.Logger, clientName string) (*EventPublisher, error) {
+func NewPublisher(ctx context.Context, logger *zap.Logger, clientName string) (*EventPublisher, error) {
 	logger.Info("Initializing NATS publisher", zap.String("client_name", clientName))
 	cfg, err := config.LoadConfig()
 	if err != nil {
@@ -37,7 +35,7 @@ func NewPublisher(logger *zap.Logger, clientName string) (*EventPublisher, error
 	cfg.Logger = logger
 	cfg.ClientName = clientName
 
-	ctx, cancel := context.WithTimeout(context.Background(), config.NewSubscriberContextTimeout)
+	ctx, cancel := context.WithTimeout(ctx, config.NewSubscriberContextTimeout)
 	defer cancel()
 
 	conn, js, err := config.Connect(ctx, cfg)
@@ -61,12 +59,7 @@ func NewPublisher(logger *zap.Logger, clientName string) (*EventPublisher, error
 }
 
 func (p *EventPublisher) Publish(ctx context.Context, event eventing.MdaiEvent, subject string) error {
-	if event.ID == "" {
-		event.ID = nuid.Next()
-	}
-	if event.Timestamp.IsZero() {
-		event.Timestamp = time.Now().UTC()
-	}
+	event.ApplyDefaults() // TODO this should happen at event creation time
 
 	if subject == "" {
 		return errors.New("subject is required")

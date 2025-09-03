@@ -60,7 +60,7 @@ func TestElasticGroupDelivery(t *testing.T) {
 	logger, err := zap.NewDevelopment()
 	require.NoError(t, err)
 
-	pub, err := NewPublisher(logger, "test")
+	pub, err := NewPublisher(context.Background(), logger, "test")
 	require.NoError(t, err)
 
 	want := map[string]int{
@@ -115,7 +115,7 @@ func TestPartitionKeyConsistency(t *testing.T) {
 	logger, err := zap.NewDevelopment()
 	require.NoError(t, err)
 
-	pub, err := NewPublisher(logger, "test-publisher")
+	pub, err := NewPublisher(context.Background(), logger, "test-publisher")
 	require.NoError(t, err)
 
 	// Define two distinct event keys
@@ -195,7 +195,7 @@ func TestDLQForwarding(t *testing.T) {
 	logger, err := zap.NewDevelopment()
 	require.NoError(t, err)
 
-	pub, err := NewPublisher(logger, "test-publisher")
+	pub, err := NewPublisher(context.Background(), logger, "test-publisher")
 	require.NoError(t, err)
 
 	// Subscribe directly to the DLQ subject
@@ -242,7 +242,7 @@ func TestDuplicateSuppression(t *testing.T) {
 	logger, err := zap.NewDevelopment()
 	require.NoError(t, err)
 
-	pub, err := NewPublisher(logger, "test")
+	pub, err := NewPublisher(context.Background(), logger, "test")
 	require.NoError(t, err)
 
 	var mu sync.Mutex
@@ -287,7 +287,7 @@ func TestSingleActiveMember(t *testing.T) {
 	logger, err := zap.NewDevelopment()
 	require.NoError(t, err)
 
-	pub, err := NewPublisher(logger, "test")
+	pub, err := NewPublisher(context.Background(), logger, "test")
 	require.NoError(t, err)
 
 	// Register and disconnect 10 subscribers to add them to the group membership
@@ -343,7 +343,7 @@ func TestPublishEventIDGeneration(t *testing.T) {
 	logger, err := zap.NewDevelopment()
 	require.NoError(t, err)
 
-	pub, err := NewPublisher(logger, "test-id-gen")
+	pub, err := NewPublisher(context.Background(), logger, "test-id-gen")
 	require.NoError(t, err)
 	defer func() {
 		err := pub.Close()
@@ -407,7 +407,7 @@ func TestPublishTimestampGeneration(t *testing.T) {
 	logger, err := zap.NewDevelopment()
 	require.NoError(t, err)
 
-	pub, err := NewPublisher(logger, "test-timestamp")
+	pub, err := NewPublisher(context.Background(), logger, "test-timestamp")
 	require.NoError(t, err)
 	defer func() {
 		err := pub.Close()
@@ -475,7 +475,7 @@ func TestPublishSubjectGeneration(t *testing.T) {
 	logger, err := zap.NewDevelopment()
 	require.NoError(t, err)
 
-	pub, err := NewPublisher(logger, "test-subject")
+	pub, err := NewPublisher(context.Background(), logger, "test-subject")
 	require.NoError(t, err)
 	defer func() {
 		closeErr := pub.Close()
@@ -503,7 +503,7 @@ func TestPublishHeaderGeneration(t *testing.T) {
 	logger, err := zap.NewDevelopment()
 	require.NoError(t, err)
 
-	pub, err := NewPublisher(logger, "test-headers")
+	pub, err := NewPublisher(context.Background(), logger, "test-headers")
 	require.NoError(t, err)
 	defer func() {
 		err := pub.Close()
@@ -569,7 +569,7 @@ func TestPublishJSONSerialization(t *testing.T) {
 	logger, err := zap.NewDevelopment()
 	require.NoError(t, err)
 
-	pub, err := NewPublisher(logger, "test-json")
+	pub, err := NewPublisher(context.Background(), logger, "test-json")
 	require.NoError(t, err)
 	defer func() {
 		err := pub.Close()
@@ -631,7 +631,7 @@ func TestPublisherClose(t *testing.T) {
 	logger, err := zap.NewDevelopment()
 	require.NoError(t, err)
 
-	pub, err := NewPublisher(logger, "test-close")
+	pub, err := NewPublisher(context.Background(), logger, "test-close")
 	require.NoError(t, err)
 
 	err = pub.Close()
@@ -651,7 +651,7 @@ func TestNewPublisherConfigHandling(t *testing.T) {
 
 	logger := zap.NewNop()
 
-	pub, err := NewPublisher(logger, "test-config")
+	pub, err := NewPublisher(context.Background(), logger, "test-config")
 	require.NoError(t, err)
 	defer func() {
 		err := pub.Close()
@@ -671,14 +671,14 @@ func TestNewPublisherStreamCreation(t *testing.T) {
 	logger, err := zap.NewDevelopment()
 	require.NoError(t, err)
 
-	pub1, err := NewPublisher(logger, "test-stream-1")
+	pub1, err := NewPublisher(context.Background(), logger, "test-stream-1")
 	require.NoError(t, err, "first publisher should create stream successfully")
 	defer func() {
 		pub1CloseErr := pub1.Close()
 		require.NoError(t, pub1CloseErr, "failed to close pub1")
 	}()
 
-	pub2, err := NewPublisher(logger, "test-stream-2")
+	pub2, err := NewPublisher(context.Background(), logger, "test-stream-2")
 	require.NoError(t, err, "second publisher should use existing stream")
 	defer func() {
 		pub2CloseErr := pub2.Close()

@@ -74,10 +74,10 @@ func (mdaiEvent *MdaiEvent) MarshalLogObject(enc zapcore.ObjectEncoder) error {
 
 func (mdaiEvent *MdaiEvent) ApplyDefaults() {
 	if mdaiEvent.ID == "" {
-		mdaiEvent.ID = createEventUUID()
+		mdaiEvent.ID = uuid.Must(uuid.NewV7()).String() // time-ordered
 	}
 	if mdaiEvent.Timestamp.IsZero() {
-		mdaiEvent.Timestamp = time.Now()
+		mdaiEvent.Timestamp = time.Now().UTC()
 	}
 
 	if mdaiEvent.Version == 0 {
@@ -100,11 +100,6 @@ func (mdaiEvent *MdaiEvent) Validate() error {
 		return fmt.Errorf("%w: %s", errMissingRequiredFields, "payload")
 	}
 	return nil
-}
-
-func createEventUUID() string {
-	id := uuid.New()
-	return id.String()
 }
 
 // ManualVariablesActionPayload represents a payload for static variables actions.
