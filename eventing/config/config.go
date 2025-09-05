@@ -24,6 +24,13 @@ const (
 	flushTimeout                = 250 * time.Millisecond
 	NewSubscriberContextTimeout = 5 * time.Minute
 	maxPCGroupMembers           = 5
+
+	DefaultAckWait       = 30 * time.Second
+	DefaultMaxAckPending = 1
+	defaultDuplicates    = 2 * time.Minute
+	initialInterval      = 250 * time.Millisecond
+	maxInterval          = 60 * time.Second
+	multiplier           = 2.0
 )
 
 type Config struct {
@@ -36,15 +43,6 @@ type Config struct {
 	NatsPassword      string        `envconfig:"NATS_PASSWORD"`
 	Logger            *zap.Logger   `envconfig:"-"`
 }
-
-const (
-	DefaultAckWait       = 30 * time.Second
-	DefaultMaxAckPending = 1
-	defaultDuplicates    = 2 * time.Minute
-	initialInterval      = 250 * time.Millisecond
-	maxInterval          = 60 * time.Second
-	multiplier           = 2.0
-)
 
 func LoadConfig() (Config, error) {
 	var cfg Config
