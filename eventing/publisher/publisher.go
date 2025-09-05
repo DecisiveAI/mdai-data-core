@@ -14,7 +14,7 @@ import (
 )
 
 type Publisher interface {
-	Publish(ctx context.Context, event eventing.MdaiEvent, subject string) error
+	Publish(ctx context.Context, event eventing.MdaiEvent, subject eventing.MdaiEventSubject) error
 	Close() error
 }
 
@@ -58,14 +58,14 @@ func NewPublisher(ctx context.Context, logger *zap.Logger, clientName string) (*
 	return &EventPublisher{cfg: cfg, logger: cfg.Logger, conn: conn, js: js}, nil
 }
 
-func (p *EventPublisher) Publish(ctx context.Context, event eventing.MdaiEvent, subject string) error {
+func (p *EventPublisher) Publish(ctx context.Context, event eventing.MdaiEvent, subject eventing.MdaiEventSubject) error {
 	event.ApplyDefaults() // TODO this should happen at event creation time
 
-	if subject == "" {
+	if subject.Stream == "" {
 		return errors.New("subject is required")
 	}
 
-	fullSubject := config.AddPrefixToSubject(p.cfg.Subject, subject)
+	fullSubject := config.AddPrefixToSubject(p.cfg.Subject, subject.String())
 	p.logger.Info("Publishing event to subject", zap.String("subject", fullSubject), zap.Object("event", &event))
 
 	data, err := json.Marshal(event)

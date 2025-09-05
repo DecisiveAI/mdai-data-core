@@ -44,7 +44,7 @@ func mustPublish(t *testing.T, pub *EventPublisher, ev eventing.MdaiEvent) {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
-	if err := pub.Publish(ctx, ev, "alert.mdai.test"); err != nil {
+	if err := pub.Publish(ctx, ev, eventing.NewMdaiEventSubject(eventing.MdaiAlertStream, "mdai.test")); err != nil {
 		t.Fatalf("publish: %v", err)
 	}
 }
@@ -418,7 +418,8 @@ func TestPublishEventIDGeneration(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 
-			err := pub.Publish(ctx, tt.event, "alert.test.test")
+			subject := eventing.NewMdaiEventSubject(eventing.MdaiAlertStream, "test.test")
+			err := pub.Publish(ctx, tt.event, subject)
 			require.NoError(t, err, tt.desc)
 
 			if tt.hasID {
@@ -483,7 +484,8 @@ func TestPublishTimestampGeneration(t *testing.T) {
 			defer cancel()
 
 			beforePublish := time.Now().UTC()
-			err := pub.Publish(ctx, tt.event, "alert.test.test")
+			subject := eventing.NewMdaiEventSubject(eventing.MdaiAlertStream, "test.test")
+			err := pub.Publish(ctx, tt.event, subject)
 			afterPublish := time.Now().UTC()
 
 			require.NoError(t, err, tt.desc)
@@ -522,7 +524,8 @@ func TestPublishSubjectGeneration(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	err = pub.Publish(ctx, event, "alert.test.test")
+	subject := eventing.NewMdaiEventSubject(eventing.MdaiAlertStream, "test.test")
+	err = pub.Publish(ctx, event, subject)
 	require.NoError(t, err)
 }
 
@@ -586,7 +589,8 @@ func TestPublishHeaderGeneration(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 
-			err := pub.Publish(ctx, tt.event, "alert.test.test")
+			subject := eventing.NewMdaiEventSubject(eventing.MdaiAlertStream, "test.test")
+			err := pub.Publish(ctx, tt.event, subject)
 			require.NoError(t, err, tt.desc)
 		})
 	}
@@ -643,7 +647,8 @@ func TestPublishJSONSerialization(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 
-			err := pub.Publish(ctx, tt.event, "alert.test.test")
+			subject := eventing.NewMdaiEventSubject(eventing.MdaiAlertStream, "test.test")
+			err := pub.Publish(ctx, tt.event, subject)
 
 			if tt.wantErr {
 				assert.Error(t, err, tt.desc)
@@ -725,9 +730,10 @@ func TestNewPublisherStreamCreation(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	err = pub1.Publish(ctx, event, "alert.test.test")
+	subject := eventing.NewMdaiEventSubject(eventing.MdaiAlertStream, "test.test")
+	err = pub1.Publish(ctx, event, subject)
 	require.NoError(t, err, "first publisher should publish successfully")
 
-	err = pub2.Publish(ctx, event, "alert.test.test")
+	err = pub2.Publish(ctx, event, subject)
 	require.NoError(t, err, "second publisher should publish successfully")
 }

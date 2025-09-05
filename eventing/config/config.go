@@ -190,11 +190,12 @@ func EnsureStream(ctx context.Context, js jetstream.JetStream, cfg Config) error
 	_, err := js.Stream(ctx, cfg.StreamName)
 	if errors.Is(err, jetstream.ErrStreamNotFound) {
 		cfg.Logger.Info("Creating new NATS JetStream stream", zap.String("stream_name", cfg.StreamName))
+		jetStreamSubjects := getAllSubjectsForJetstream()
 		_, err = js.CreateStream(ctx,
 			jetstream.StreamConfig{
 				Name: cfg.StreamName,
 				// TODO create a separate stream for DLQ since it could have different retention settings
-				Subjects:   []string{"eventing.alert.*.*", "eventing.alert.dlq", "eventing.var.*.*", "eventing.var.dlq"},
+				Subjects:   jetStreamSubjects,
 				Storage:    jetstream.FileStorage,
 				Retention:  jetstream.WorkQueuePolicy, // assume no replay needed
 				MaxMsgs:    -1,
@@ -208,6 +209,26 @@ func EnsureStream(ctx context.Context, js jetstream.JetStream, cfg Config) error
 	}
 
 	return nil
+}
+
+// Used to create streams for JetStream config
+func getConfigStreams(stream eventing.MdaiEventSubjectStream) (string, string) {
+	return fmt.Sprintf("eventing.%s.*.*", stream), fmt.Sprintf("eventing.%s.dlq", stream)
+}
+
+func getAllSubjectsForJetstream() []string {
+	alertWildcard, alertDlq := getConfigStreams(eventing.MdaiAlertStream)
+	varWildcard, varDlq := getConfigStreams(eventing.MdaiVarStream)
+	replayWildcard, replayDlq := getConfigStreams(eventing.MdaiReplayStream)
+	jetStreamSubjects := []string{
+		alertWildcard,
+		alertDlq,
+		varWildcard,
+		varDlq,
+		replayWildcard,
+		replayDlq,
+	}
+	return jetStreamSubjects
 }
 
 func ensureElasticGroup(ctx context.Context, js jetstream.JetStream, streamName, groupName, pattern string, hashWildcards []int, cfg Config) error {

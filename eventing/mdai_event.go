@@ -10,11 +10,35 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
+type MdaiEventSubjectStream string
+
+type MdaiEventSubject struct {
+	// The specific MDAI Event stream this event belongs. Joined to Path with "."
+	Stream MdaiEventSubjectStream
+	// The path after the stream. Joined to preceding Stream with "."
+	Path string
+}
+
+func (subject MdaiEventSubject) String() string {
+	return fmt.Sprintf("%s.%s", subject.Stream, subject.Path)
+}
+
+func NewMdaiEventSubject(stream MdaiEventSubjectStream, path string) MdaiEventSubject {
+	return MdaiEventSubject{
+		Stream: stream,
+		Path:   path,
+	}
+}
+
 const (
 	AlertConsumerGroupName      = "alert-consumer-group"
 	VarsConsumerGroupName       = "vars-consumer-group"
 	ManualVariablesEventSource  = "manual_variables_api"
 	PrometheusAlertsEventSource = "prometheus"
+
+	MdaiAlertStream  MdaiEventSubjectStream = "alert"
+	MdaiVarStream    MdaiEventSubjectStream = "var"
+	MdaiReplayStream MdaiEventSubjectStream = "replay"
 )
 
 // HandlerInvoker is a function type that processes MdaiEvents.
