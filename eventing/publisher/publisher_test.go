@@ -282,58 +282,88 @@ func TestDuplicateSuppression(t *testing.T) {
 // the lone remaining subscriber receives all eventing across multiple keys.
 func TestSingleActiveMember(t *testing.T) {
 	srv, _ := runJetStream(t)
-	defer srv.Shutdown()
+	t.Cleanup(func() { srv.Shutdown() })
+
+	t.Setenv("NATS_URL", srv.ClientURL())
+	t.Setenv("HOSTNAME", "")
 
 	logger, err := zap.NewDevelopment()
 	require.NoError(t, err)
 
 	pub, err := NewPublisher(context.Background(), logger, "test")
 	require.NoError(t, err)
+	t.Cleanup(func() { _ = pub.Close() })
 
-	// Register and disconnect 10 subscribers to add them to the group membership
+	// Register and disconnect 10 members to simulate prior group history.
 	for i := 1; i <= 10; i++ {
 		pod := fmt.Sprintf("member_%02d", i)
-		setPodName(pod)
-		sub, newSubErr := subscriber.NewSubscriber(t.Context(), logger, "test")
-		require.NoError(t, newSubErr)
-		require.NoError(t, sub.Subscribe(t.Context(), eventing.AlertConsumerGroupName, "alert", func(ev eventing.MdaiEvent) error { return nil }))
-		_ = sub.Close()
+		t.Setenv("POD_NAME", pod)
+
+		sub, err := subscriber.NewSubscriber(t.Context(), logger, "test")
+		require.NoError(t, err)
+
+		require.NoError(t, sub.Subscribe(
+			t.Context(),
+			eventing.AlertConsumerGroupName,
+			"alert",
+			func(ev eventing.MdaiEvent) error { return nil },
+		))
+
+		require.NoError(t, sub.Close())
 	}
 
-	time.Sleep(2 * time.Second)
+	time.Sleep(3 * time.Second)
 
-	// Only one active subscriber remains
+	// Single active subscriber
 	active := "member_11"
-	setPodName(active)
-	var mu sync.Mutex
-	var received []string
+	t.Setenv("POD_NAME", active)
+
+	var (
+		mu       sync.Mutex
+		received []string
+	)
+
 	sub, err := subscriber.NewSubscriber(t.Context(), logger, "test")
 	require.NoError(t, err)
-	require.NoError(t, sub.Subscribe(t.Context(), eventing.AlertConsumerGroupName, "alert", func(ev eventing.MdaiEvent) error {
-		mu.Lock()
-		received = append(received, ev.Name)
-		mu.Unlock()
-		return nil
-	}))
-	defer func(sub *subscriber.EventSubscriber) {
-		_ = sub.Close()
-	}(sub)
+	t.Cleanup(func() { _ = sub.Close() })
 
-	// Publish eventing for two keys
+	require.NoError(t, sub.Subscribe(
+		t.Context(),
+		eventing.AlertConsumerGroupName,
+		"alert",
+		func(ev eventing.MdaiEvent) error {
+			mu.Lock()
+			received = append(received, ev.Name)
+			mu.Unlock()
+			return nil
+		},
+	))
+
+	// Publish events on two keys
 	keys := []string{"KeyA", "KeyB"}
 	const count = 5
-	for i := range count {
+
+	for i := 0; i < count; i++ {
 		for _, k := range keys {
-			mustPublish(t, pub, eventing.MdaiEvent{Name: k, HubName: "hub", Source: "src", Payload: fmt.Sprintf(`{"i":%d}`, i)})
+			mustPublish(t, pub, eventing.MdaiEvent{
+				Name:    k,
+				HubName: "hub",
+				Source:  "src",
+				Payload: fmt.Sprintf(`{"i":%d}`, i),
+			})
 		}
 	}
-	time.Sleep(2 * time.Second)
 
-	mu.Lock()
-	total := len(received)
-	mu.Unlock()
 	want := len(keys) * count
-	assert.Equal(t, want, total, "active subscriber should receive all %d messages, got %d", want, total)
+
+	// Wait until we have everything (more robust than fixed sleeps)
+	require.Eventually(t, func() bool {
+		mu.Lock()
+		n := len(received)
+		mu.Unlock()
+		return n == want
+	}, 10*time.Second, 50*time.Millisecond,
+		"active subscriber should receive all %d messages", want)
 }
 
 func TestPublishEventIDGeneration(t *testing.T) {

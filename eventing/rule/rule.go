@@ -9,11 +9,6 @@ import (
 	"github.com/decisiveai/mdai-data-core/eventing/triggers"
 )
 
-// Rules represents a collection of rule.
-type Rules struct {
-	Rules []Rule `json:"rule"`
-}
-
 // Rule represents a rule that triggers a set of commands when a certain event occurs.
 type Rule struct {
 	Name     string           `json:"name"`
