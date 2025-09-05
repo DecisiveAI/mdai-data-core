@@ -37,11 +37,15 @@ func InitLogger(ctx context.Context, serviceName string) (internalLogger *zap.Lo
 	encoderConfig.CallerKey = "caller"                    // Show caller file and line number
 
 	// Parse LOG_LEVEL; default info.
+	invalidLogLevel := false
 	logLevel := zap.NewAtomicLevelAt(zap.InfoLevel)
-	if s := strings.TrimSpace(os.Getenv(logLevelEnvVar)); s != "" {
+	logLevelValue := strings.TrimSpace(os.Getenv(logLevelEnvVar))
+	if logLevelValue != "" {
 		var parsed zapcore.Level
-		if err := parsed.UnmarshalText([]byte(strings.ToLower(s))); err == nil {
+		if err := parsed.UnmarshalText([]byte(strings.ToLower(logLevelValue))); err == nil {
 			logLevel.SetLevel(parsed)
+		} else {
+			invalidLogLevel = true
 		}
 	}
 
@@ -51,6 +55,9 @@ func InitLogger(ctx context.Context, serviceName string) (internalLogger *zap.Lo
 		zapcore.DebugLevel,                    // Log level will be updated later
 	)
 	internalLogger = zap.New(stdCore, zap.AddCaller(), zap.IncreaseLevel(logLevel))
+	if invalidLogLevel {
+		internalLogger.Warn("invalid log level provided, defaulting to info", zap.String("level", logLevelValue))
+	}
 
 	otelShutdown, err := setupOTel(ctx, internalLogger)
 	if err != nil {
