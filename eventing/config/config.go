@@ -31,7 +31,72 @@ const (
 	initialInterval      = 250 * time.Millisecond
 	maxInterval          = 60 * time.Second
 	multiplier           = 2.0
+
+	dlqSuffix = "dlq"
 )
+
+type MdaiSubjectConfig struct {
+	Topic         eventing.MdaiEventType
+	ConsumerGroup eventing.MdaiEventConsumerGroup
+	WildcardCount int
+}
+
+func (subjectConfig MdaiSubjectConfig) GetWildcardString() string {
+	wildcard := strings.TrimSuffix(strings.Repeat("*.", subjectConfig.WildcardCount), ".")
+	return fmt.Sprintf("eventing.%s.%s", subjectConfig.Topic, wildcard)
+}
+
+// Used to create streams for JetStream config
+func (subjectConfig MdaiSubjectConfig) GetWildcardAndSuffixedSubjects(suffixes ...string) []string {
+	subjects := []string{
+		subjectConfig.GetWildcardString(),
+	}
+	for _, suffix := range suffixes {
+		subjects = append(subjects, fmt.Sprintf("eventing.%s.%s", subjectConfig.Topic, suffix))
+	}
+	return subjects
+}
+
+func (subjectConfig MdaiSubjectConfig) GetWildcardIndices() []int {
+	var indices []int
+	for i := 1; i <= subjectConfig.WildcardCount; i++ {
+		indices = append(indices, i)
+	}
+	return indices
+}
+
+var (
+	alertSubjectConfig = MdaiSubjectConfig{
+		Topic:         eventing.AlertEventType,
+		ConsumerGroup: eventing.AlertConsumerGroupName,
+		WildcardCount: 2,
+	}
+	varSubjectConfig = MdaiSubjectConfig{
+		Topic:         eventing.VarEventType,
+		ConsumerGroup: eventing.VarsConsumerGroupName,
+		WildcardCount: 2,
+	}
+	replaySubjectConfig = MdaiSubjectConfig{
+		Topic:         eventing.ReplayEventType,
+		ConsumerGroup: eventing.ReplayConsumerGroupName,
+		WildcardCount: 2,
+	}
+)
+
+type AllSubjectConfigs []MdaiSubjectConfig
+
+var (
+	allSubjectConfigs AllSubjectConfigs = []MdaiSubjectConfig{alertSubjectConfig, varSubjectConfig, replaySubjectConfig}
+)
+
+func (subjectConfigs AllSubjectConfigs) GetAllSubjectStringsWithAdditionalSuffixes(additionalNonWildcardSuffixes ...string) []string {
+	subjects := make([]string, len(subjectConfigs)*len(additionalNonWildcardSuffixes))
+	for _, stream := range subjectConfigs {
+		streamSubjects := stream.GetWildcardAndSuffixedSubjects(additionalNonWildcardSuffixes...)
+		subjects = append(subjects, streamSubjects...)
+	}
+	return subjects
+}
 
 type Config struct {
 	URL               string        `default:"nats://mdai-hub-nats.mdai.svc.cluster.local:4222" envconfig:"NATS_URL"`
@@ -180,17 +245,19 @@ func firstNonEmpty(vals ...string) string {
 }
 
 func EnsurePCGroup(ctx context.Context, js jetstream.JetStream, cfg Config) error {
-	if err := ensureElasticGroup(ctx, js, cfg.StreamName, eventing.AlertConsumerGroupName, "eventing.alert.*.*", []int{1, 2}, cfg); err != nil {
-		return err
+	for _, subject := range allSubjectConfigs {
+		if err := ensureElasticGroup(ctx, js, cfg.StreamName, string(subject.ConsumerGroup), subject.GetWildcardString(), subject.GetWildcardIndices(), cfg); err != nil {
+			return err
+		}
 	}
-	return ensureElasticGroup(ctx, js, cfg.StreamName, eventing.VarsConsumerGroupName, "eventing.var.*.*", []int{1, 2}, cfg)
+	return nil
 }
 
 func EnsureStream(ctx context.Context, js jetstream.JetStream, cfg Config) error {
 	_, err := js.Stream(ctx, cfg.StreamName)
 	if errors.Is(err, jetstream.ErrStreamNotFound) {
 		cfg.Logger.Info("Creating new NATS JetStream stream", zap.String("stream_name", cfg.StreamName))
-		jetStreamSubjects := getAllSubjectsForJetstream()
+		jetStreamSubjects := allSubjectConfigs.GetAllSubjectStringsWithAdditionalSuffixes(dlqSuffix)
 		_, err = js.CreateStream(ctx,
 			jetstream.StreamConfig{
 				Name: cfg.StreamName,
@@ -209,26 +276,6 @@ func EnsureStream(ctx context.Context, js jetstream.JetStream, cfg Config) error
 	}
 
 	return nil
-}
-
-// Used to create streams for JetStream config
-func getConfigStreams(stream eventing.MdaiEventSubjectStream) (string, string) {
-	return fmt.Sprintf("eventing.%s.*.*", stream), fmt.Sprintf("eventing.%s.dlq", stream)
-}
-
-func getAllSubjectsForJetstream() []string {
-	alertWildcard, alertDlq := getConfigStreams(eventing.MdaiAlertStream)
-	varWildcard, varDlq := getConfigStreams(eventing.MdaiVarStream)
-	replayWildcard, replayDlq := getConfigStreams(eventing.MdaiReplayStream)
-	jetStreamSubjects := []string{
-		alertWildcard,
-		alertDlq,
-		varWildcard,
-		varDlq,
-		replayWildcard,
-		replayDlq,
-	}
-	return jetStreamSubjects
 }
 
 func ensureElasticGroup(ctx context.Context, js jetstream.JetStream, streamName, groupName, pattern string, hashWildcards []int, cfg Config) error {

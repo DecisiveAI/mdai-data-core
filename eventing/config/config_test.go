@@ -293,3 +293,108 @@ func TestGetMemberIDs(t *testing.T) {
 		})
 	}
 }
+
+func TestWildcardString(t *testing.T) {
+	tests := []struct {
+		desc          string
+		subjectConfig MdaiSubjectConfig
+		expected      string
+	}{
+		{
+			desc: "two",
+			subjectConfig: MdaiSubjectConfig{
+				Topic:         "foobar",
+				ConsumerGroup: "bazfoo",
+				WildcardCount: 2,
+			},
+			expected: "eventing.foobar.*.*",
+		},
+		{
+			desc: "five",
+			subjectConfig: MdaiSubjectConfig{
+				Topic:         "foobar",
+				ConsumerGroup: "bazfoo",
+				WildcardCount: 5,
+			},
+			expected: "eventing.foobar.*.*.*.*.*",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.desc, func(t *testing.T) {
+			actual := tt.subjectConfig.GetWildcardString()
+			assert.Equal(t, tt.expected, actual, "WildcardString mismatch")
+		})
+	}
+}
+
+func TestGetWildcardAndSuffixedSubjects(t *testing.T) {
+	tests := []struct {
+		desc          string
+		suffixes      []string
+		subjectConfig MdaiSubjectConfig
+		expected      []string
+	}{
+		{
+			desc:     "two",
+			suffixes: []string{"dlq"},
+			subjectConfig: MdaiSubjectConfig{
+				Topic:         "foobar",
+				ConsumerGroup: "bazfoo",
+				WildcardCount: 2,
+			},
+			expected: []string{"eventing.foobar.*.*", "eventing.foobar.dlq"},
+		},
+		{
+			desc:     "five",
+			suffixes: []string{"dlq"},
+			subjectConfig: MdaiSubjectConfig{
+				Topic:         "asdf",
+				ConsumerGroup: "asdf-consumer",
+				WildcardCount: 5,
+			},
+			expected: []string{"eventing.asdf.*.*.*.*.*", "eventing.asdf.dlq"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.desc, func(t *testing.T) {
+			actual := tt.subjectConfig.GetWildcardAndSuffixedSubjects(tt.suffixes...)
+			assert.Equal(t, tt.expected, actual, "Suffix mismatch")
+		})
+	}
+}
+
+func TestGetWildcardIndicesSlice(t *testing.T) {
+	tests := []struct {
+		desc          string
+		subjectConfig MdaiSubjectConfig
+		expected      []int
+	}{
+		{
+			desc: "two",
+			subjectConfig: MdaiSubjectConfig{
+				Topic:         "foobar",
+				ConsumerGroup: "bazfoo",
+				WildcardCount: 2,
+			},
+			expected: []int{1, 2},
+		},
+		{
+			desc: "five",
+			subjectConfig: MdaiSubjectConfig{
+				Topic:         "asdf",
+				ConsumerGroup: "asdf-consumer",
+				WildcardCount: 5,
+			},
+			expected: []int{1, 2, 3, 4, 5},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.desc, func(t *testing.T) {
+			actual := tt.subjectConfig.GetWildcardIndices()
+			assert.Equal(t, tt.expected, actual, "Bad wildcard indices")
+		})
+	}
+}

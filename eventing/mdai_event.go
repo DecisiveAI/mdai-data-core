@@ -10,35 +10,39 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
-type MdaiEventSubjectStream string
+type MdaiEventType string
+type MdaiEventConsumerGroup string
 
 type MdaiEventSubject struct {
 	// The specific MDAI Event stream this event belongs. Joined to Path with "."
-	Stream MdaiEventSubjectStream
-	// The path after the stream. Joined to preceding Stream with "."
+	Type MdaiEventType
+	// The path after the stream. Joined to preceding Type with "."
 	Path string
 }
 
 func (subject MdaiEventSubject) String() string {
-	return fmt.Sprintf("%s.%s", subject.Stream, subject.Path)
+	return fmt.Sprintf("%s.%s", subject.Type, subject.Path)
 }
 
-func NewMdaiEventSubject(stream MdaiEventSubjectStream, path string) MdaiEventSubject {
+func NewMdaiEventSubject(stream MdaiEventType, path string) MdaiEventSubject {
 	return MdaiEventSubject{
-		Stream: stream,
-		Path:   path,
+		Type: stream,
+		Path: path,
 	}
 }
 
 const (
-	AlertConsumerGroupName      = "alert-consumer-group"
-	VarsConsumerGroupName       = "vars-consumer-group"
+	AlertEventType  MdaiEventType = "alert"
+	VarEventType    MdaiEventType = "var"
+	ReplayEventType MdaiEventType = "replay"
+
+	AlertConsumerGroupName  MdaiEventConsumerGroup = "alert-consumer-group"
+	VarsConsumerGroupName   MdaiEventConsumerGroup = "vars-consumer-group"
+	ReplayConsumerGroupName MdaiEventConsumerGroup = "replay-consumer-group"
+
 	ManualVariablesEventSource  = "manual_variables_api"
 	PrometheusAlertsEventSource = "prometheus"
-
-	MdaiAlertStream  MdaiEventSubjectStream = "alert"
-	MdaiVarStream    MdaiEventSubjectStream = "var"
-	MdaiReplayStream MdaiEventSubjectStream = "replay"
+	BufferReplaySource          = "buffer-replay"
 )
 
 // HandlerInvoker is a function type that processes MdaiEvents.

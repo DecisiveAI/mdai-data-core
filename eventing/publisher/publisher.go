@@ -61,7 +61,7 @@ func NewPublisher(ctx context.Context, logger *zap.Logger, clientName string) (*
 func (p *EventPublisher) Publish(ctx context.Context, event eventing.MdaiEvent, subject eventing.MdaiEventSubject) error {
 	event.ApplyDefaults() // TODO this should happen at event creation time
 
-	if subject.Stream == "" {
+	if subject.Type == "" {
 		return errors.New("subject is required")
 	}
 
