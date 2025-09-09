@@ -398,3 +398,40 @@ func TestGetWildcardIndicesSlice(t *testing.T) {
 		})
 	}
 }
+
+func TestGetAllSubjectStringsWithAdditionalSuffixes(t *testing.T) {
+	tests := []struct {
+		desc     string
+		suffixes []string
+		expected []string
+	}{
+		{
+			desc:     "none",
+			suffixes: []string{},
+			expected: []string{
+				"eventing.alert.*.*",
+				"eventing.var.*.*",
+				"eventing.replay.*.*",
+			},
+		},
+		{
+			desc:     "dlq",
+			suffixes: []string{dlqSuffix},
+			expected: []string{
+				"eventing.alert.*.*",
+				"eventing.alert.dlq",
+				"eventing.var.*.*",
+				"eventing.var.dlq",
+				"eventing.replay.*.*",
+				"eventing.replay.dlq",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.desc, func(t *testing.T) {
+			actual := allSubjectConfigs.GetAllSubjectStringsWithAdditionalSuffixes(tt.suffixes...)
+			assert.Equal(t, tt.expected, actual, "Bad subject strings")
+		})
+	}
+}

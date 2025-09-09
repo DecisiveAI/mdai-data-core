@@ -90,7 +90,7 @@ var (
 )
 
 func (subjectConfigs AllSubjectConfigs) GetAllSubjectStringsWithAdditionalSuffixes(additionalNonWildcardSuffixes ...string) []string {
-	subjects := make([]string, len(subjectConfigs)*len(additionalNonWildcardSuffixes))
+	var subjects []string
 	for _, stream := range subjectConfigs {
 		streamSubjects := stream.GetWildcardAndSuffixedSubjects(additionalNonWildcardSuffixes...)
 		subjects = append(subjects, streamSubjects...)
