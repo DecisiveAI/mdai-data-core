@@ -71,11 +71,11 @@ func TestSubscriber_SubscribeValidationErrors(t *testing.T) {
 	require.EqualError(t, err, "groupName is required")
 
 	// invoker required
-	err = sub.Subscribe(ctx, string(eventing.AlertConsumerGroupName), "alerts", nil)
+	err = sub.Subscribe(ctx, eventing.AlertConsumerGroupName.String(), "alerts", nil)
 	require.EqualError(t, err, "invoker is required")
 
 	// dlqSubject required
-	err = sub.Subscribe(ctx, string(eventing.AlertConsumerGroupName), "", validInvoker)
+	err = sub.Subscribe(ctx, eventing.AlertConsumerGroupName.String(), "", validInvoker)
 	require.EqualError(t, err, "dlqSubject is required")
 }
 
@@ -89,7 +89,7 @@ func TestSubscriber_SubscribeSuccessfully(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = sub.Close() })
 
-	err = sub.Subscribe(t.Context(), string(eventing.AlertConsumerGroupName), "alerts", func(ev eventing.MdaiEvent) error {
+	err = sub.Subscribe(t.Context(), eventing.AlertConsumerGroupName.String(), "alerts", func(ev eventing.MdaiEvent) error {
 		fmt.Printf("Received alert: %+v\n", ev)
 		return nil
 	})

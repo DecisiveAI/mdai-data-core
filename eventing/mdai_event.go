@@ -24,11 +24,23 @@ func (subject MdaiEventSubject) String() string {
 	return fmt.Sprintf("%s.%s", subject.Type, subject.Path)
 }
 
+func (subject MdaiEventSubject) PrefixedString(prefix string) string {
+	return fmt.Sprintf("%s.%s", prefix, subject.String())
+}
+
 func NewMdaiEventSubject(stream MdaiEventType, path string) MdaiEventSubject {
 	return MdaiEventSubject{
 		Type: stream,
 		Path: path,
 	}
+}
+
+func (eventType MdaiEventType) String() string {
+	return string(eventType)
+}
+
+func (consumerGroup MdaiEventConsumerGroup) String() string {
+	return string(consumerGroup)
 }
 
 const (

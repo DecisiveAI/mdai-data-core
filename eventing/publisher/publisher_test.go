@@ -83,7 +83,7 @@ func TestElasticGroupDelivery(t *testing.T) {
 		setPodName(id)
 		sub, err := subscriber.NewSubscriber(context.Background(), logger, "test-subscriber-"+id)
 		require.NoError(t, err, "subscriber %d", i)
-		require.NoError(t, sub.Subscribe(t.Context(), string(eventing.AlertConsumerGroupName), "alert", handler), "subscribe %d", i)
+		require.NoError(t, sub.Subscribe(t.Context(), eventing.AlertConsumerGroupName.String(), "alert", handler), "subscribe %d", i)
 	}
 
 	for range 5 {
@@ -147,12 +147,12 @@ func TestPartitionKeyConsistency(t *testing.T) {
 	setPodName("member1")
 	sub1, err := subscriber.NewSubscriber(t.Context(), logger, "test-subscriber1")
 	require.NoError(t, err)
-	require.NoError(t, sub1.Subscribe(t.Context(), string(eventing.AlertConsumerGroupName), "alert", handler1))
+	require.NoError(t, sub1.Subscribe(t.Context(), eventing.AlertConsumerGroupName.String(), "alert", handler1))
 
 	setPodName("member2")
 	sub2, err := subscriber.NewSubscriber(context.Background(), logger, "test-subscriber2")
 	require.NoError(t, err)
-	require.NoError(t, sub2.Subscribe(t.Context(), string(eventing.AlertConsumerGroupName), "alert", handler2))
+	require.NoError(t, sub2.Subscribe(t.Context(), eventing.AlertConsumerGroupName.String(), "alert", handler2))
 
 	const count = 5
 	for range count {
@@ -214,7 +214,7 @@ func TestDLQForwarding(t *testing.T) {
 	// Create a subscriber whose handler always errors
 	sub, err := subscriber.NewSubscriber(t.Context(), logger, "test-dlq-subscriber")
 	require.NoError(t, err)
-	err = sub.Subscribe(t.Context(), string(eventing.AlertConsumerGroupName), "alert", func(ev eventing.MdaiEvent) error {
+	err = sub.Subscribe(t.Context(), eventing.AlertConsumerGroupName.String(), "alert", func(ev eventing.MdaiEvent) error {
 		return errors.New("handler error")
 	})
 	require.NoError(t, err)
@@ -251,7 +251,7 @@ func TestDuplicateSuppression(t *testing.T) {
 	// Subscriber records each delivery
 	sub, err := subscriber.NewSubscriber(context.Background(), logger, "test")
 	require.NoError(t, err)
-	err = sub.Subscribe(t.Context(), string(eventing.AlertConsumerGroupName), "alerts", func(ev eventing.MdaiEvent) error {
+	err = sub.Subscribe(t.Context(), eventing.AlertConsumerGroupName.String(), "alerts", func(ev eventing.MdaiEvent) error {
 		mu.Lock()
 		delivered++
 		mu.Unlock()
@@ -304,7 +304,7 @@ func TestSingleActiveMember(t *testing.T) {
 
 		require.NoError(t, sub.Subscribe(
 			t.Context(),
-			string(eventing.AlertConsumerGroupName),
+			eventing.AlertConsumerGroupName.String(),
 			"alert",
 			func(ev eventing.MdaiEvent) error { return nil },
 		))
@@ -329,7 +329,7 @@ func TestSingleActiveMember(t *testing.T) {
 
 	require.NoError(t, sub.Subscribe(
 		t.Context(),
-		string(eventing.AlertConsumerGroupName),
+		eventing.AlertConsumerGroupName.String(),
 		"alert",
 		func(ev eventing.MdaiEvent) error {
 			mu.Lock()

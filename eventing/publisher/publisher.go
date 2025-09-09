@@ -65,7 +65,7 @@ func (p *EventPublisher) Publish(ctx context.Context, event eventing.MdaiEvent, 
 		return errors.New("subject is required")
 	}
 
-	fullSubject := config.AddPrefixToSubject(p.cfg.Subject, subject.String())
+	fullSubject := subject.PrefixedString(p.cfg.Subject)
 	p.logger.Info("Publishing event to subject", zap.String("subject", fullSubject), zap.Object("event", &event))
 
 	data, err := json.Marshal(event)

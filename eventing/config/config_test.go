@@ -297,11 +297,13 @@ func TestGetMemberIDs(t *testing.T) {
 func TestWildcardString(t *testing.T) {
 	tests := []struct {
 		desc          string
+		prefix        string
 		subjectConfig MdaiSubjectConfig
 		expected      string
 	}{
 		{
-			desc: "two",
+			desc:   "two",
+			prefix: "eventing",
 			subjectConfig: MdaiSubjectConfig{
 				Topic:         "foobar",
 				ConsumerGroup: "bazfoo",
@@ -310,7 +312,8 @@ func TestWildcardString(t *testing.T) {
 			expected: "eventing.foobar.*.*",
 		},
 		{
-			desc: "five",
+			desc:   "five",
+			prefix: "eventing",
 			subjectConfig: MdaiSubjectConfig{
 				Topic:         "foobar",
 				ConsumerGroup: "bazfoo",
@@ -322,7 +325,7 @@ func TestWildcardString(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.desc, func(t *testing.T) {
-			actual := tt.subjectConfig.GetWildcardString()
+			actual := tt.subjectConfig.GetPrefixedWildcardString(tt.prefix)
 			assert.Equal(t, tt.expected, actual, "WildcardString mismatch")
 		})
 	}
@@ -331,12 +334,14 @@ func TestWildcardString(t *testing.T) {
 func TestGetWildcardAndSuffixedSubjects(t *testing.T) {
 	tests := []struct {
 		desc          string
+		prefix        string
 		suffixes      []string
 		subjectConfig MdaiSubjectConfig
 		expected      []string
 	}{
 		{
 			desc:     "two",
+			prefix:   "eventing",
 			suffixes: []string{"dlq"},
 			subjectConfig: MdaiSubjectConfig{
 				Topic:         "foobar",
@@ -347,6 +352,7 @@ func TestGetWildcardAndSuffixedSubjects(t *testing.T) {
 		},
 		{
 			desc:     "five",
+			prefix:   "eventing",
 			suffixes: []string{"dlq"},
 			subjectConfig: MdaiSubjectConfig{
 				Topic:         "asdf",
@@ -359,7 +365,7 @@ func TestGetWildcardAndSuffixedSubjects(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.desc, func(t *testing.T) {
-			actual := tt.subjectConfig.GetWildcardAndSuffixedSubjects(tt.suffixes...)
+			actual := tt.subjectConfig.GetWildcardAndSuffixedSubjects(tt.prefix, tt.suffixes...)
 			assert.Equal(t, tt.expected, actual, "Suffix mismatch")
 		})
 	}
@@ -402,11 +408,13 @@ func TestGetWildcardIndicesSlice(t *testing.T) {
 func TestGetAllSubjectStringsWithAdditionalSuffixes(t *testing.T) {
 	tests := []struct {
 		desc     string
+		prefix   string
 		suffixes []string
 		expected []string
 	}{
 		{
 			desc:     "none",
+			prefix:   "eventing",
 			suffixes: []string{},
 			expected: []string{
 				"eventing.alert.*.*",
@@ -416,6 +424,7 @@ func TestGetAllSubjectStringsWithAdditionalSuffixes(t *testing.T) {
 		},
 		{
 			desc:     "dlq",
+			prefix:   "eventing",
 			suffixes: []string{dlqSuffix},
 			expected: []string{
 				"eventing.alert.*.*",
@@ -430,7 +439,7 @@ func TestGetAllSubjectStringsWithAdditionalSuffixes(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.desc, func(t *testing.T) {
-			actual := allSubjectConfigs.GetAllSubjectStringsWithAdditionalSuffixes(tt.suffixes...)
+			actual := allSubjectConfigs.GetAllSubjectStringsWithAdditionalSuffixes(tt.prefix, tt.suffixes...)
 			assert.Equal(t, tt.expected, actual, "Bad subject strings")
 		})
 	}

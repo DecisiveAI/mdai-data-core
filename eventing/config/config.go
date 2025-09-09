@@ -43,16 +43,20 @@ type MdaiSubjectConfig struct {
 
 func (subjectConfig MdaiSubjectConfig) GetWildcardString() string {
 	wildcard := strings.TrimSuffix(strings.Repeat("*.", subjectConfig.WildcardCount), ".")
-	return fmt.Sprintf("eventing.%s.%s", subjectConfig.Topic, wildcard)
+	return fmt.Sprintf("%s.%s", subjectConfig.Topic, wildcard)
+}
+
+func (subjectConfig MdaiSubjectConfig) GetPrefixedWildcardString(prefix string) string {
+	return fmt.Sprintf("%s.%s", prefix, subjectConfig.GetWildcardString())
 }
 
 // Used to create streams for JetStream config
-func (subjectConfig MdaiSubjectConfig) GetWildcardAndSuffixedSubjects(suffixes ...string) []string {
+func (subjectConfig MdaiSubjectConfig) GetWildcardAndSuffixedSubjects(prefix string, suffixes ...string) []string {
 	subjects := []string{
-		subjectConfig.GetWildcardString(),
+		subjectConfig.GetPrefixedWildcardString(prefix),
 	}
 	for _, suffix := range suffixes {
-		subjects = append(subjects, fmt.Sprintf("eventing.%s.%s", subjectConfig.Topic, suffix))
+		subjects = append(subjects, fmt.Sprintf("%s.%s.%s", prefix, subjectConfig.Topic, suffix))
 	}
 	return subjects
 }
@@ -89,10 +93,10 @@ var (
 	allSubjectConfigs AllSubjectConfigs = []MdaiSubjectConfig{alertSubjectConfig, varSubjectConfig, replaySubjectConfig}
 )
 
-func (subjectConfigs AllSubjectConfigs) GetAllSubjectStringsWithAdditionalSuffixes(additionalNonWildcardSuffixes ...string) []string {
+func (subjectConfigs AllSubjectConfigs) GetAllSubjectStringsWithAdditionalSuffixes(prefix string, additionalNonWildcardSuffixes ...string) []string {
 	var subjects []string
 	for _, stream := range subjectConfigs {
-		streamSubjects := stream.GetWildcardAndSuffixedSubjects(additionalNonWildcardSuffixes...)
+		streamSubjects := stream.GetWildcardAndSuffixedSubjects(prefix, additionalNonWildcardSuffixes...)
 		subjects = append(subjects, streamSubjects...)
 	}
 	return subjects
@@ -123,10 +127,6 @@ func SafeToken(s string) string {
 		return "unknown"
 	}
 	return strings.NewReplacer(".", "_", " ", "_").Replace(s)
-}
-
-func AddPrefixToSubject(prefix string, eventSubject string) string {
-	return prefix + "." + eventSubject
 }
 
 //nolint:ireturn
@@ -246,7 +246,7 @@ func firstNonEmpty(vals ...string) string {
 
 func EnsurePCGroup(ctx context.Context, js jetstream.JetStream, cfg Config) error {
 	for _, subject := range allSubjectConfigs {
-		if err := ensureElasticGroup(ctx, js, cfg.StreamName, string(subject.ConsumerGroup), subject.GetWildcardString(), subject.GetWildcardIndices(), cfg); err != nil {
+		if err := ensureElasticGroup(ctx, js, cfg.StreamName, string(subject.ConsumerGroup), subject.GetPrefixedWildcardString(cfg.Subject), subject.GetWildcardIndices(), cfg); err != nil {
 			return err
 		}
 	}
@@ -257,7 +257,7 @@ func EnsureStream(ctx context.Context, js jetstream.JetStream, cfg Config) error
 	_, err := js.Stream(ctx, cfg.StreamName)
 	if errors.Is(err, jetstream.ErrStreamNotFound) {
 		cfg.Logger.Info("Creating new NATS JetStream stream", zap.String("stream_name", cfg.StreamName))
-		jetStreamSubjects := allSubjectConfigs.GetAllSubjectStringsWithAdditionalSuffixes(dlqSuffix)
+		jetStreamSubjects := allSubjectConfigs.GetAllSubjectStringsWithAdditionalSuffixes(cfg.Subject, dlqSuffix)
 		_, err = js.CreateStream(ctx,
 			jetstream.StreamConfig{
 				Name: cfg.StreamName,
