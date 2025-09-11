@@ -300,6 +300,7 @@ func TestWildcardString(t *testing.T) {
 		prefix        string
 		subjectConfig mdaiSubjectConfig
 		expected      string
+		expectErr     bool
 	}{
 		{
 			desc:   "two",
@@ -321,12 +322,27 @@ func TestWildcardString(t *testing.T) {
 			},
 			expected: "eventing.foobar.*.*.*.*.*",
 		},
+		{
+			desc:      "no topic",
+			expectErr: true,
+			prefix:    "eventing",
+			subjectConfig: mdaiSubjectConfig{
+				ConsumerGroup: "bazfoo",
+				WildcardCount: 2,
+			},
+			expected: "eventing.foobar.*.*.*.*.*",
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.desc, func(t *testing.T) {
-			actual := tt.subjectConfig.getPrefixedWildcardString(tt.prefix)
-			assert.Equal(t, tt.expected, actual, "WildcardString mismatch")
+			actual, err := tt.subjectConfig.getPrefixedWildcardString(tt.prefix)
+			if tt.expectErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tt.expected, actual, "WildcardString mismatch")
+			}
 		})
 	}
 }
@@ -376,7 +392,8 @@ func TestGetWildcardAndSuffixedSubjects(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.desc, func(t *testing.T) {
-			actual := tt.subjectConfig.getWildcardAndSuffixedSubjects(tt.prefix, tt.suffixes...)
+			actual, err := tt.subjectConfig.getWildcardAndSuffixedSubjects(tt.prefix, tt.suffixes...)
+			assert.NoError(t, err)
 			assert.Equal(t, tt.expected, actual, "Suffix mismatch")
 		})
 	}
@@ -458,7 +475,7 @@ func TestGetAllSubjectStringsWithAdditionalSuffixes(t *testing.T) {
 		{
 			desc:     "ni",
 			prefix:   "ni",
-			suffixes: []string{"ekke", "ekke", "ekke", "ekke", "ptang", "zoo", "boing!"},
+			suffixes: []string{"ekke", "ekke", "ekke", "ekke", "ptang", "zoo", "boing"},
 			expected: []string{
 				"ni.alert.*.*",
 				"ni.alert.ekke",
@@ -490,7 +507,8 @@ func TestGetAllSubjectStringsWithAdditionalSuffixes(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.desc, func(t *testing.T) {
-			actual := everySubjectConfig.getAllSubjectStringsWithAdditionalSuffixes(tt.prefix, tt.suffixes...)
+			actual, err := everySubjectConfig.getAllSubjectStringsWithAdditionalSuffixes(tt.prefix, tt.suffixes...)
+			assert.NoError(t, err)
 			assert.Equal(t, tt.expected, actual, "Bad subject strings")
 		})
 	}

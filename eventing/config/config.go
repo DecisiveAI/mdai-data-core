@@ -41,26 +41,38 @@ type mdaiSubjectConfig struct {
 	WildcardCount int
 }
 
-func (subjectConfig mdaiSubjectConfig) getWildcardString() string {
+func (subjectConfig mdaiSubjectConfig) getWildcardString() (string, error) {
+	if subjectConfig.Topic == "" {
+		return "", errors.New("Invalid subject config, empty topic")
+	}
+
 	if subjectConfig.WildcardCount <= 0 {
-		return subjectConfig.Topic.String()
+		return subjectConfig.Topic.String(), nil
 	}
 	wildcard := strings.TrimSuffix(strings.Repeat("*.", subjectConfig.WildcardCount), ".")
-	return fmt.Sprintf("%s.%s", subjectConfig.Topic, wildcard)
+	return fmt.Sprintf("%s.%s", subjectConfig.Topic, wildcard), nil
 }
 
-func (subjectConfig mdaiSubjectConfig) getPrefixedWildcardString(prefix string) string {
-	return fmt.Sprintf("%s.%s", prefix, subjectConfig.getWildcardString())
+func (subjectConfig mdaiSubjectConfig) getPrefixedWildcardString(prefix string) (string, error) {
+	wildcardedString, err := subjectConfig.getWildcardString()
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("%s.%s", prefix, wildcardedString), nil
 }
 
 // Used to create streams for JetStream config
-func (subjectConfig mdaiSubjectConfig) getWildcardAndSuffixedSubjects(prefix string, suffixes ...string) []string {
+func (subjectConfig mdaiSubjectConfig) getWildcardAndSuffixedSubjects(prefix string, suffixes ...string) ([]string, error) {
 	subjects := make([]string, 0, len(suffixes)+1)
-	subjects = append(subjects, subjectConfig.getPrefixedWildcardString(prefix))
+	prefixedString, err := subjectConfig.getPrefixedWildcardString(prefix)
+	if err != nil {
+		return nil, err
+	}
+	subjects = append(subjects, prefixedString)
 	for _, suffix := range suffixes {
 		subjects = append(subjects, fmt.Sprintf("%s.%s.%s", prefix, subjectConfig.Topic, suffix))
 	}
-	return subjects
+	return subjects, nil
 }
 
 func (subjectConfig mdaiSubjectConfig) getWildcardIndices() []int {
@@ -98,13 +110,16 @@ var (
 	everySubjectConfig allSubjectConfigs = []mdaiSubjectConfig{alertSubjectConfig, varSubjectConfig, replaySubjectConfig}
 )
 
-func (subjectConfigs allSubjectConfigs) getAllSubjectStringsWithAdditionalSuffixes(prefix string, additionalNonWildcardSuffixes ...string) []string {
+func (subjectConfigs allSubjectConfigs) getAllSubjectStringsWithAdditionalSuffixes(prefix string, additionalNonWildcardSuffixes ...string) ([]string, error) {
 	subjects := make([]string, 0, len(additionalNonWildcardSuffixes)+1)
 	for _, stream := range subjectConfigs {
-		streamSubjects := stream.getWildcardAndSuffixedSubjects(prefix, additionalNonWildcardSuffixes...)
+		streamSubjects, err := stream.getWildcardAndSuffixedSubjects(prefix, additionalNonWildcardSuffixes...)
+		if err != nil {
+			return nil, err
+		}
 		subjects = append(subjects, streamSubjects...)
 	}
-	return subjects
+	return subjects, nil
 }
 
 type Config struct {
@@ -251,7 +266,11 @@ func firstNonEmpty(vals ...string) string {
 
 func EnsurePCGroup(ctx context.Context, js jetstream.JetStream, cfg Config) error {
 	for _, subject := range everySubjectConfig {
-		if err := ensureElasticGroup(ctx, js, cfg.StreamName, string(subject.ConsumerGroup), subject.getPrefixedWildcardString(cfg.Subject), subject.getWildcardIndices(), cfg); err != nil {
+		prefixedWildcardString, err := subject.getPrefixedWildcardString(cfg.Subject)
+		if err != nil {
+			return err
+		}
+		if err := ensureElasticGroup(ctx, js, cfg.StreamName, string(subject.ConsumerGroup), prefixedWildcardString, subject.getWildcardIndices(), cfg); err != nil {
 			return err
 		}
 	}
@@ -262,7 +281,10 @@ func EnsureStream(ctx context.Context, js jetstream.JetStream, cfg Config) error
 	_, err := js.Stream(ctx, cfg.StreamName)
 	if errors.Is(err, jetstream.ErrStreamNotFound) {
 		cfg.Logger.Info("Creating new NATS JetStream stream", zap.String("stream_name", cfg.StreamName))
-		jetStreamSubjects := everySubjectConfig.getAllSubjectStringsWithAdditionalSuffixes(cfg.Subject, dlqSuffix)
+		jetStreamSubjects, subjectErr := everySubjectConfig.getAllSubjectStringsWithAdditionalSuffixes(cfg.Subject, dlqSuffix)
+		if subjectErr != nil {
+			return subjectErr
+		}
 		_, err = js.CreateStream(ctx,
 			jetstream.StreamConfig{
 				Name: cfg.StreamName,
