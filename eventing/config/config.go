@@ -41,9 +41,20 @@ type mdaiSubjectConfig struct {
 	WildcardCount int
 }
 
-func (subjectConfig mdaiSubjectConfig) getWildcardString() (string, error) {
+func (subjectConfig mdaiSubjectConfig) validate() error {
 	if subjectConfig.Topic == "" {
-		return "", errors.New("Invalid subject config, empty topic")
+		return errors.New("invalid subject config, empty topic")
+	}
+	if subjectConfig.ConsumerGroup == "" {
+		return errors.New("invalid subject config, empty consumerGroup")
+	}
+	return nil
+}
+
+func (subjectConfig mdaiSubjectConfig) getWildcardString() (string, error) {
+	err := subjectConfig.validate()
+	if err != nil {
+		return "", err
 	}
 
 	if subjectConfig.WildcardCount <= 0 {

@@ -330,7 +330,21 @@ func TestWildcardString(t *testing.T) {
 				ConsumerGroup: "bazfoo",
 				WildcardCount: 2,
 			},
-			expected: "eventing.foobar.*.*.*.*.*",
+		},
+		{
+			desc:      "no cg",
+			expectErr: true,
+			prefix:    "eventing",
+			subjectConfig: mdaiSubjectConfig{
+				Topic:         "foobar",
+				WildcardCount: 2,
+			},
+		},
+		{
+			desc:          "no nothing",
+			expectErr:     true,
+			prefix:        "eventing",
+			subjectConfig: mdaiSubjectConfig{},
 		},
 	}
 
