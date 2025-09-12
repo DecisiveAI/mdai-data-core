@@ -293,3 +293,237 @@ func TestGetMemberIDs(t *testing.T) {
 		})
 	}
 }
+
+func TestWildcardString(t *testing.T) {
+	tests := []struct {
+		desc          string
+		prefix        string
+		subjectConfig mdaiSubjectConfig
+		expected      string
+		expectErr     bool
+	}{
+		{
+			desc:   "two",
+			prefix: "eventing",
+			subjectConfig: mdaiSubjectConfig{
+				Topic:         "foobar",
+				ConsumerGroup: "bazfoo",
+				WildcardCount: 2,
+			},
+			expected: "eventing.foobar.*.*",
+		},
+		{
+			desc:   "five",
+			prefix: "eventing",
+			subjectConfig: mdaiSubjectConfig{
+				Topic:         "foobar",
+				ConsumerGroup: "bazfoo",
+				WildcardCount: 5,
+			},
+			expected: "eventing.foobar.*.*.*.*.*",
+		},
+		{
+			desc:      "no topic",
+			expectErr: true,
+			prefix:    "eventing",
+			subjectConfig: mdaiSubjectConfig{
+				ConsumerGroup: "bazfoo",
+				WildcardCount: 2,
+			},
+		},
+		{
+			desc:      "no cg",
+			expectErr: true,
+			prefix:    "eventing",
+			subjectConfig: mdaiSubjectConfig{
+				Topic:         "foobar",
+				WildcardCount: 2,
+			},
+		},
+		{
+			desc:          "no nothing",
+			expectErr:     true,
+			prefix:        "eventing",
+			subjectConfig: mdaiSubjectConfig{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.desc, func(t *testing.T) {
+			actual, err := tt.subjectConfig.getPrefixedWildcardString(tt.prefix)
+			if tt.expectErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tt.expected, actual, "WildcardString mismatch")
+			}
+		})
+	}
+}
+
+func TestGetWildcardAndSuffixedSubjects(t *testing.T) {
+	tests := []struct {
+		desc          string
+		prefix        string
+		suffixes      []string
+		subjectConfig mdaiSubjectConfig
+		expected      []string
+	}{
+		{
+			desc:     "two",
+			prefix:   "eventing",
+			suffixes: []string{"dlq"},
+			subjectConfig: mdaiSubjectConfig{
+				Topic:         "foobar",
+				ConsumerGroup: "bazfoo",
+				WildcardCount: 2,
+			},
+			expected: []string{"eventing.foobar.*.*", "eventing.foobar.dlq"},
+		},
+		{
+			desc:     "five",
+			prefix:   "eventing",
+			suffixes: []string{"dlq"},
+			subjectConfig: mdaiSubjectConfig{
+				Topic:         "asdf",
+				ConsumerGroup: "asdf-consumer",
+				WildcardCount: 5,
+			},
+			expected: []string{"eventing.asdf.*.*.*.*.*", "eventing.asdf.dlq"},
+		},
+		{
+			desc:     "negative?",
+			prefix:   "eventing",
+			suffixes: []string{"dlq"},
+			subjectConfig: mdaiSubjectConfig{
+				Topic:         "asdf",
+				ConsumerGroup: "asdf-consumer",
+				WildcardCount: -1,
+			},
+			expected: []string{"eventing.asdf", "eventing.asdf.dlq"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.desc, func(t *testing.T) {
+			actual, err := tt.subjectConfig.getWildcardAndSuffixedSubjects(tt.prefix, tt.suffixes...)
+			assert.NoError(t, err)
+			assert.Equal(t, tt.expected, actual, "Suffix mismatch")
+		})
+	}
+}
+
+func TestGetWildcardIndicesSlice(t *testing.T) {
+	tests := []struct {
+		desc          string
+		subjectConfig mdaiSubjectConfig
+		expected      []int
+	}{
+		{
+			desc: "two",
+			subjectConfig: mdaiSubjectConfig{
+				Topic:         "foobar",
+				ConsumerGroup: "bazfoo",
+				WildcardCount: 2,
+			},
+			expected: []int{1, 2},
+		},
+		{
+			desc: "five",
+			subjectConfig: mdaiSubjectConfig{
+				Topic:         "asdf",
+				ConsumerGroup: "asdf-consumer",
+				WildcardCount: 5,
+			},
+			expected: []int{1, 2, 3, 4, 5},
+		},
+		{
+			desc: "negative?",
+			subjectConfig: mdaiSubjectConfig{
+				Topic:         "asdf",
+				ConsumerGroup: "asdf-consumer",
+				WildcardCount: -1,
+			},
+			expected: []int{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.desc, func(t *testing.T) {
+			actual := tt.subjectConfig.getWildcardIndices()
+			assert.Equal(t, tt.expected, actual, "Bad wildcard indices")
+		})
+	}
+}
+
+func TestGetAllSubjectStringsWithAdditionalSuffixes(t *testing.T) {
+	tests := []struct {
+		desc     string
+		prefix   string
+		suffixes []string
+		expected []string
+	}{
+		{
+			desc:     "none",
+			prefix:   "eventing",
+			suffixes: []string{},
+			expected: []string{
+				"eventing.alert.*.*",
+				"eventing.var.*.*",
+				"eventing.replay.*.*",
+			},
+		},
+		{
+			desc:     "dlq",
+			prefix:   "eventing",
+			suffixes: []string{dlqSuffix},
+			expected: []string{
+				"eventing.alert.*.*",
+				"eventing.alert.dlq",
+				"eventing.var.*.*",
+				"eventing.var.dlq",
+				"eventing.replay.*.*",
+				"eventing.replay.dlq",
+			},
+		},
+		{
+			desc:     "ni",
+			prefix:   "ni",
+			suffixes: []string{"ekke", "ekke", "ekke", "ekke", "ptang", "zoo", "boing"},
+			expected: []string{
+				"ni.alert.*.*",
+				"ni.alert.ekke",
+				"ni.alert.ekke",
+				"ni.alert.ekke",
+				"ni.alert.ekke",
+				"ni.alert.ptang",
+				"ni.alert.zoo",
+				"ni.alert.boing",
+				"ni.var.*.*",
+				"ni.var.ekke",
+				"ni.var.ekke",
+				"ni.var.ekke",
+				"ni.var.ekke",
+				"ni.var.ptang",
+				"ni.var.zoo",
+				"ni.var.boing",
+				"ni.replay.*.*",
+				"ni.replay.ekke",
+				"ni.replay.ekke",
+				"ni.replay.ekke",
+				"ni.replay.ekke",
+				"ni.replay.ptang",
+				"ni.replay.zoo",
+				"ni.replay.boing",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.desc, func(t *testing.T) {
+			actual, err := everySubjectConfig.getAllSubjectStringsWithAdditionalSuffixes(tt.prefix, tt.suffixes...)
+			assert.NoError(t, err)
+			assert.Equal(t, tt.expected, actual, "Bad subject strings")
+		})
+	}
+}

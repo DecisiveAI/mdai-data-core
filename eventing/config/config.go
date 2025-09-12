@@ -31,7 +31,105 @@ const (
 	initialInterval      = 250 * time.Millisecond
 	maxInterval          = 60 * time.Second
 	multiplier           = 2.0
+
+	dlqSuffix = "dlq"
 )
+
+type mdaiSubjectConfig struct {
+	Topic         eventing.MdaiEventType
+	ConsumerGroup eventing.MdaiEventConsumerGroup
+	WildcardCount int
+}
+
+func (subjectConfig mdaiSubjectConfig) validate() error {
+	if subjectConfig.Topic == "" {
+		return errors.New("invalid subject config, empty topic")
+	}
+	if subjectConfig.ConsumerGroup == "" {
+		return errors.New("invalid subject config, empty consumerGroup")
+	}
+	return nil
+}
+
+func (subjectConfig mdaiSubjectConfig) getWildcardString() (string, error) {
+	if err := subjectConfig.validate(); err != nil {
+		return "", err
+	}
+	if subjectConfig.WildcardCount <= 0 {
+		return subjectConfig.Topic.String(), nil
+	}
+	wildcard := strings.TrimSuffix(strings.Repeat("*.", subjectConfig.WildcardCount), ".")
+	return fmt.Sprintf("%s.%s", subjectConfig.Topic, wildcard), nil
+}
+
+func (subjectConfig mdaiSubjectConfig) getPrefixedWildcardString(prefix string) (string, error) {
+	wildcardedString, err := subjectConfig.getWildcardString()
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("%s.%s", prefix, wildcardedString), nil
+}
+
+// Used to create streams for JetStream config
+func (subjectConfig mdaiSubjectConfig) getWildcardAndSuffixedSubjects(prefix string, suffixes ...string) ([]string, error) {
+	subjects := make([]string, 0, len(suffixes)+1)
+	prefixedString, err := subjectConfig.getPrefixedWildcardString(prefix)
+	if err != nil {
+		return nil, err
+	}
+	subjects = append(subjects, prefixedString)
+	for _, suffix := range suffixes {
+		subjects = append(subjects, fmt.Sprintf("%s.%s.%s", prefix, subjectConfig.Topic, suffix))
+	}
+	return subjects, nil
+}
+
+func (subjectConfig mdaiSubjectConfig) getWildcardIndices() []int {
+	if subjectConfig.WildcardCount <= 0 {
+		return []int{}
+	}
+	indices := make([]int, 0, subjectConfig.WildcardCount)
+	for i := 1; i <= subjectConfig.WildcardCount; i++ {
+		indices = append(indices, i)
+	}
+	return indices
+}
+
+var (
+	alertSubjectConfig = mdaiSubjectConfig{
+		Topic:         eventing.AlertEventType,
+		ConsumerGroup: eventing.AlertConsumerGroupName,
+		WildcardCount: 2,
+	}
+	varSubjectConfig = mdaiSubjectConfig{
+		Topic:         eventing.VarEventType,
+		ConsumerGroup: eventing.VarsConsumerGroupName,
+		WildcardCount: 2,
+	}
+	replaySubjectConfig = mdaiSubjectConfig{
+		Topic:         eventing.ReplayEventType,
+		ConsumerGroup: eventing.ReplayConsumerGroupName,
+		WildcardCount: 2,
+	}
+)
+
+type allSubjectConfigs []mdaiSubjectConfig
+
+var (
+	everySubjectConfig allSubjectConfigs = []mdaiSubjectConfig{alertSubjectConfig, varSubjectConfig, replaySubjectConfig}
+)
+
+func (subjectConfigs allSubjectConfigs) getAllSubjectStringsWithAdditionalSuffixes(prefix string, additionalNonWildcardSuffixes ...string) ([]string, error) {
+	subjects := make([]string, 0, len(additionalNonWildcardSuffixes)+1)
+	for _, stream := range subjectConfigs {
+		streamSubjects, err := stream.getWildcardAndSuffixedSubjects(prefix, additionalNonWildcardSuffixes...)
+		if err != nil {
+			return nil, err
+		}
+		subjects = append(subjects, streamSubjects...)
+	}
+	return subjects, nil
+}
 
 type Config struct {
 	URL               string        `default:"nats://mdai-hub-nats.mdai.svc.cluster.local:4222" envconfig:"NATS_URL"`
@@ -58,10 +156,6 @@ func SafeToken(s string) string {
 		return "unknown"
 	}
 	return strings.NewReplacer(".", "_", " ", "_").Replace(s)
-}
-
-func AddPrefixToSubject(prefix string, eventSubject string) string {
-	return prefix + "." + eventSubject
 }
 
 //nolint:ireturn
@@ -180,21 +274,31 @@ func firstNonEmpty(vals ...string) string {
 }
 
 func EnsurePCGroup(ctx context.Context, js jetstream.JetStream, cfg Config) error {
-	if err := ensureElasticGroup(ctx, js, cfg.StreamName, eventing.AlertConsumerGroupName, "eventing.alert.*.*", []int{1, 2}, cfg); err != nil {
-		return err
+	for _, subject := range everySubjectConfig {
+		prefixedWildcardString, err := subject.getPrefixedWildcardString(cfg.Subject)
+		if err != nil {
+			return err
+		}
+		if err := ensureElasticGroup(ctx, js, cfg.StreamName, string(subject.ConsumerGroup), prefixedWildcardString, subject.getWildcardIndices(), cfg); err != nil {
+			return err
+		}
 	}
-	return ensureElasticGroup(ctx, js, cfg.StreamName, eventing.VarsConsumerGroupName, "eventing.var.*.*", []int{1, 2}, cfg)
+	return nil
 }
 
 func EnsureStream(ctx context.Context, js jetstream.JetStream, cfg Config) error {
 	_, err := js.Stream(ctx, cfg.StreamName)
 	if errors.Is(err, jetstream.ErrStreamNotFound) {
 		cfg.Logger.Info("Creating new NATS JetStream stream", zap.String("stream_name", cfg.StreamName))
+		jetStreamSubjects, subjectErr := everySubjectConfig.getAllSubjectStringsWithAdditionalSuffixes(cfg.Subject, dlqSuffix)
+		if subjectErr != nil {
+			return subjectErr
+		}
 		_, err = js.CreateStream(ctx,
 			jetstream.StreamConfig{
 				Name: cfg.StreamName,
 				// TODO create a separate stream for DLQ since it could have different retention settings
-				Subjects:   []string{"eventing.alert.*.*", "eventing.alert.dlq", "eventing.var.*.*", "eventing.var.dlq"},
+				Subjects:   jetStreamSubjects,
 				Storage:    jetstream.FileStorage,
 				Retention:  jetstream.WorkQueuePolicy, // assume no replay needed
 				MaxMsgs:    -1,
