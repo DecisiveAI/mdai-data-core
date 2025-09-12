@@ -15,12 +15,21 @@ import (
 	"github.com/valkey-io/valkey-go"
 )
 
+// HandlerAdapter is a wrapper for handling variable operations.
+// Functions of HandlerAdapter execute the provided valkey commands and logs audit entries.
+// Common functions arguments:
+// ctx is the context for the request.
+// variableKey is the key for the Valkey data type.
+// hubName is the name of the associated hub, used for namespacing.
+// value is the element to be added to the data type.
+// correlationId is used for tracking and auditing purposes.
 type HandlerAdapter struct {
 	client        valkey.Client
 	logger        *zap.Logger
 	valkeyAdapter *variables.ValkeyAdapter
 }
 
+// NewHandlerAdapter creates a new wrapper for handling variable operations.
 func NewHandlerAdapter(client valkey.Client, logger *zap.Logger, opts ...variables.ValkeyAdapterOption) *HandlerAdapter {
 	va := variables.NewValkeyAdapter(client, logger, opts...)
 	ha := &HandlerAdapter{
@@ -32,6 +41,7 @@ func NewHandlerAdapter(client valkey.Client, logger *zap.Logger, opts ...variabl
 	return ha
 }
 
+// AddElementToSet adds an element to a Set data type and logs an audit entry.
 func (r *HandlerAdapter) AddElementToSet(ctx context.Context, variableKey string, hubName string, value string, correlationId string) error {
 	variableUpdateCommand := r.valkeyAdapter.AddElementToSet(variableKey, hubName, value)
 
@@ -41,6 +51,7 @@ func (r *HandlerAdapter) AddElementToSet(ctx context.Context, variableKey string
 	return r.executeAuditedUpdateCommand(ctx, variableKey, variableUpdateCommand, auditLogCommand)
 }
 
+// RemoveElementFromSet removes an element from a Set data type and logs an audit entry.
 func (r *HandlerAdapter) RemoveElementFromSet(ctx context.Context, variableKey string, hubName string, value string, correlationId string) error {
 	variableUpdateCommand := r.valkeyAdapter.RemoveElementFromSet(variableKey, hubName, value)
 
@@ -50,7 +61,11 @@ func (r *HandlerAdapter) RemoveElementFromSet(ctx context.Context, variableKey s
 	return r.executeAuditedUpdateCommand(ctx, variableKey, variableUpdateCommand, auditLogCommand)
 }
 
-func (r *HandlerAdapter) AddSetMapElement(ctx context.Context, variableKey string, hubName string, field string, value string, correlationId string) error {
+// SetMapEntry sets a field-value pair in a map data type and logs an audit entry.
+// It is using Valkey's HSET command on a Hash data type under the hood.
+// This command overwrites the values of specified fields that exist in the hash.
+// If key doesn't exist, a new key holding a hash is created.
+func (r *HandlerAdapter) SetMapEntry(ctx context.Context, variableKey string, hubName string, field string, value string, correlationId string) error {
 	variableUpdateCommand := r.valkeyAdapter.SetMapEntry(variableKey, hubName, field, value)
 
 	auditEntry := makeAuditEntry(variableKey, value, correlationId, "Set map entry")
@@ -59,7 +74,9 @@ func (r *HandlerAdapter) AddSetMapElement(ctx context.Context, variableKey strin
 	return r.executeAuditedUpdateCommand(ctx, variableKey, variableUpdateCommand, auditLogCommand)
 }
 
-func (r *HandlerAdapter) RemoveElementFromMap(ctx context.Context, variableKey string, hubName string, field string, correlationId string) error {
+// RemoveMapEntry removes a field from a map data type and logs an audit entry.
+// It uses Valkey's HDEL command on a Hash data type under the hood.
+func (r *HandlerAdapter) RemoveMapEntry(ctx context.Context, variableKey string, hubName string, field string, correlationId string) error {
 	variableUpdateCommand := r.valkeyAdapter.RemoveMapEntry(variableKey, hubName, field)
 
 	auditEntry := makeAuditEntry(variableKey, field, correlationId, "Remove element from set")
@@ -68,6 +85,7 @@ func (r *HandlerAdapter) RemoveElementFromMap(ctx context.Context, variableKey s
 	return r.executeAuditedUpdateCommand(ctx, variableKey, variableUpdateCommand, auditLogCommand)
 }
 
+// SetStringValue sets a string value and logs an audit entry.
 func (r *HandlerAdapter) SetStringValue(ctx context.Context, variableKey string, hubName string, value string, correlationId string) error {
 	variableUpdateCommand := r.valkeyAdapter.SetString(variableKey, hubName, value)
 

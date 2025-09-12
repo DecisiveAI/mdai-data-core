@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/decisiveai/mdai-data-core/eventing/triggers"
@@ -18,7 +19,7 @@ type Rule struct {
 
 // Command represents a single command to be executed when a rule is triggered.
 type Command struct {
-	Type   string          `json:"type"`   // e.g., variable.set.add, webhook.call
+	Type   CommandType     `json:"type"`   // e.g., variable.set.add, webhook.call
 	Inputs json.RawMessage `json:"inputs"` // command-specific parameters
 }
 
@@ -105,4 +106,48 @@ type CommandEvent struct {
 	Data            map[string]interface{} `json:"data"` // Command parameters
 	CorrelationId   string                 `json:"correlationId,omitempty"`
 	CausationId     string                 `json:"causationId,omitempty"`
+}
+
+type CommandType string
+
+const (
+	CmdVarSetAdd       CommandType = "variable.set.add"
+	CmdVarSetRemove    CommandType = "variable.set.remove"
+	CmdVarScalarUpdate CommandType = "variable.scalar.update"
+	CmdVarMapAdd       CommandType = "variable.map.add"
+	CmdVarMapRemove    CommandType = "variable.map.remove"
+	CmdWebhookCall     CommandType = "webhook.call"
+)
+
+var AllCommandTypes = []CommandType{
+	CmdVarSetAdd,
+	CmdVarSetRemove,
+	CmdVarScalarUpdate,
+	CmdVarMapAdd,
+	CmdVarMapRemove,
+	CmdWebhookCall,
+}
+
+var validCommandTypes = map[CommandType]struct{}{
+	CmdVarSetAdd:       {},
+	CmdVarSetRemove:    {},
+	CmdVarScalarUpdate: {},
+	CmdVarMapAdd:       {},
+	CmdVarMapRemove:    {},
+	CmdWebhookCall:     {},
+}
+
+func (t CommandType) String() string { return string(t) }
+func (t CommandType) Valid() bool    { _, ok := validCommandTypes[t]; return ok }
+
+func ParseCommandType(s string) (CommandType, error) {
+	t := CommandType(s)
+	if !t.Valid() {
+		var allowed []string
+		for _, v := range AllCommandTypes {
+			allowed = append(allowed, string(v))
+		}
+		return "", fmt.Errorf("invalid command type %q (allowed: %s)", s, strings.Join(allowed, ", "))
+	}
+	return t, nil
 }
