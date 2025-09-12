@@ -2,6 +2,7 @@ package rule
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/decisiveai/mdai-data-core/eventing/triggers"
@@ -32,7 +33,7 @@ func TestRule_UnmarshalJSON_AlertOK(t *testing.T) {
 	assert.Equal(t, "resolved", al.Status)
 	assert.Equal(t, "r1", r.Name)
 	assert.Len(t, r.Commands, 1)
-	assert.Equal(t, "variable.set", r.Commands[0].Type)
+	assert.Equal(t, "variable.set", r.Commands[0].Type.String())
 }
 
 func TestRule_UnmarshalJSON_VariableOK(t *testing.T) {
@@ -113,7 +114,7 @@ func TestRule_MarshalJSON_AlertOK(t *testing.T) {
 	assert.Equal(t, "firing", spec.Status)
 
 	assert.Len(t, wire.Commands, 1)
-	assert.Equal(t, "variable.set", wire.Commands[0].Type)
+	assert.Equal(t, "variable.set", wire.Commands[0].Type.String())
 
 	var got map[string]string
 	assert.NoError(t, json.Unmarshal(wire.Commands[0].Inputs, &got))
@@ -172,4 +173,53 @@ func TestRule_MarshalJSON_UnsupportedTriggerKind(t *testing.T) {
 	_, err := json.Marshal(r)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "unsupported trigger kind")
+}
+
+func TestParseCommandType_Valid_All(t *testing.T) {
+	t.Parallel()
+
+	assert.True(t, len(AllCommandTypes) > 0, "no command types defined")
+
+	for _, want := range AllCommandTypes {
+		t.Run("valid_"+string(want), func(t *testing.T) {
+			t.Parallel()
+			got, err := ParseCommandType(string(want))
+			assert.NoError(t, err)
+			assert.Equal(t, want, got)
+		})
+	}
+}
+
+func TestParseCommandType_InvalidCases(t *testing.T) {
+	t.Parallel()
+
+	assert.True(t, len(AllCommandTypes) > 0, "no command types defined")
+	var aValid = string(AllCommandTypes[0])
+
+	cases := []struct {
+		name string
+		in   string
+	}{
+		{"Unknown", "not.a.real.command"},
+		{"Empty", ""},
+		{"Whitespace", " " + aValid + " "},       // current impl doesn't trim -> invalid
+		{"CaseChanged", strings.ToUpper(aValid)}, // current impl is case-sensitive
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			ct, err := ParseCommandType(tc.in)
+			assert.Error(t, err)
+			assert.Equal(t, CommandType(""), ct)
+
+			msg := err.Error()
+			assert.Contains(t, msg, `invalid command type`)
+			// Ensure the error lists the allowed values (order-insensitive).
+			for _, allowed := range AllCommandTypes {
+				assert.Containsf(t, msg, string(allowed), "allowed list should mention %q", allowed)
+			}
+		})
+	}
 }
