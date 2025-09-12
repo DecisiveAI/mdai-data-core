@@ -52,11 +52,9 @@ func (subjectConfig mdaiSubjectConfig) validate() error {
 }
 
 func (subjectConfig mdaiSubjectConfig) getWildcardString() (string, error) {
-	err := subjectConfig.validate()
-	if err != nil {
+	if err := subjectConfig.validate(); err != nil {
 		return "", err
 	}
-
 	if subjectConfig.WildcardCount <= 0 {
 		return subjectConfig.Topic.String(), nil
 	}
