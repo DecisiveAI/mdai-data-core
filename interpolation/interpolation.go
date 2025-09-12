@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/decisiveai/mdai-event-hub/pkg/eventing"
+	"github.com/decisiveai/mdai-data-core/eventing"
 	"go.uber.org/zap"
 )
 
