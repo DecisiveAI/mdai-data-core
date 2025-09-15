@@ -17,7 +17,7 @@ type Error struct {
 	Message string
 	Scope   string
 	Field   string
-	Value  any
+	Value   any
 }
 
 func (e *Error) Error() string {
