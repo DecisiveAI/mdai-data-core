@@ -204,7 +204,7 @@ func (e *Engine) convertToString(value any) string {
 		return fmt.Sprintf("%t", v)
 	case time.Time:
 		return v.Format(time.RFC3339)
-	case map[string]interface{}, []interface{}:
+	case map[string]any, []any:
 		if jsonBytes, err := json.Marshal(v); err == nil {
 			return string(jsonBytes)
 		}
