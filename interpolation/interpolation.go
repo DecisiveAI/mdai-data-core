@@ -188,7 +188,7 @@ func (e *Engine) getNestedValue(data map[string]interface{}, path string) (inter
 	return nil, false
 }
 
-func (e *Engine) convertToString(value interface{}) string {
+func (e *Engine) convertToString(value any) string {
 	if value == nil {
 		return ""
 	}
