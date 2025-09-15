@@ -164,7 +164,7 @@ func (e *Engine) getPayloadValue(field string, event *eventing.MdaiEvent) (strin
 	return e.convertToString(value), true
 }
 
-func (e *Engine) getNestedValue(data map[string]interface{}, path string) (interface{}, bool) {
+func (e *Engine) getNestedValue(data map[string]interface{}, path string) (any, bool) {
 	parts := strings.Split(path, ".")
 	current := data
 
