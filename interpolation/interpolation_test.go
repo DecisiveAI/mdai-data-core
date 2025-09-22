@@ -48,6 +48,24 @@ func TestEngine_Interpolate(t *testing.T) {
 			event:    event,
 		},
 		{
+			name:     "correlation_id field",
+			input:    "Correlation_id: ${trigger:correlation_id}",
+			expected: "Correlation_id: corr-456",
+			event:    event,
+		},
+		{
+			name:     "hub_name field",
+			input:    "hub_name: ${trigger:hub_name}",
+			expected: "hub_name: test-hub",
+			event:    event,
+		},
+		{
+			name:     "source_id field",
+			input:    "Source: ${trigger:source_id}",
+			expected: "Source: source-123",
+			event:    event,
+		},
+		{
 			name:     "payload field with explicit prefix",
 			input:    "Level: ${trigger:payload.level}",
 			expected: "Level: info",
@@ -80,13 +98,13 @@ func TestEngine_Interpolate(t *testing.T) {
 		{
 			name:     "invalid event field - should fail",
 			input:    "Invalid: ${trigger:level:-default}",
-			expected: "Invalid: default", // Falls back to default since 'level' is not an event field
+			expected: "Invalid: default",
 			event:    event,
 		},
 		{
 			name:     "invalid nested event field - should fail",
 			input:    "Invalid: ${trigger:user.name:-default}",
-			expected: "Invalid: default", // Falls back to default since 'user.name' is not an event field
+			expected: "Invalid: default",
 			event:    event,
 		},
 		{
@@ -128,7 +146,7 @@ func TestEngine_Interpolate(t *testing.T) {
 		{
 			name:     "unsupported scope",
 			input:    "Value: ${env:PATH}",
-			expected: "Value: ${env:PATH}", // Returns original on error
+			expected: "Value: ${env:PATH}",
 			event:    event,
 		},
 	}
@@ -163,36 +181,12 @@ func TestEngine_ComplexPayloadValues(t *testing.T) {
 		input    string
 		expected string
 	}{
-		{
-			name:     "string value",
-			input:    "${trigger:payload.string_val}",
-			expected: "hello",
-		},
-		{
-			name:     "integer value",
-			input:    "${trigger:payload.int_val}",
-			expected: "42",
-		},
-		{
-			name:     "float value",
-			input:    "${trigger:payload.float_val}",
-			expected: "3.14",
-		},
-		{
-			name:     "boolean value",
-			input:    "${trigger:payload.bool_val}",
-			expected: "true",
-		},
-		{
-			name:     "object value (JSON marshaled)",
-			input:    "${trigger:payload.object_val}",
-			expected: `{"nested":"value"}`,
-		},
-		{
-			name:     "array value (JSON marshaled)",
-			input:    "${trigger:payload.array_val}",
-			expected: `[1,2,3]`,
-		},
+		{"string value", "${trigger:payload.string_val}", "hello"},
+		{"integer value", "${trigger:payload.int_val}", "42"},
+		{"float value", "${trigger:payload.float_val}", "3.14"},
+		{"boolean value", "${trigger:payload.bool_val}", "true"},
+		{"object value (JSON marshaled)", "${trigger:payload.object_val}", `{"nested":"value"}`},
+		{"array value (JSON marshaled)", "${trigger:payload.array_val}", `[1,2,3]`},
 	}
 
 	for _, tt := range tests {
@@ -209,9 +203,8 @@ func TestEngine_EventFieldsWithEmptyValues(t *testing.T) {
 	engine := NewEngine(zap.NewNop())
 
 	event := &eventing.MdaiEvent{
-		ID:   "test-id",
-		Name: "", // Empty name
-		// Timestamp is zero value
+		ID:            "test-id",
+		Name:          "",
 		Source:        "test-source",
 		SourceID:      "",
 		CorrelationID: "",
@@ -224,26 +217,10 @@ func TestEngine_EventFieldsWithEmptyValues(t *testing.T) {
 		input    string
 		expected string
 	}{
-		{
-			name:     "empty name field with default",
-			input:    "${trigger:name:-default-name}",
-			expected: "default-name",
-		},
-		{
-			name:     "empty source_id with default",
-			input:    "${trigger:source_id:-no-source}",
-			expected: "no-source",
-		},
-		{
-			name:     "zero timestamp with default",
-			input:    "${trigger:timestamp:-no-time}",
-			expected: "no-time",
-		},
-		{
-			name:     "non-empty field",
-			input:    "${trigger:id}",
-			expected: "test-id",
-		},
+		{"empty name field with default", "${trigger:name:-default-name}", "default-name"},
+		{"empty source_id with default", "${trigger:source_id:-no-source}", "no-source"},
+		{"zero timestamp with default", "${trigger:timestamp:-no-time}", "no-time"},
+		{"non-empty field", "${trigger:id}", "test-id"},
 	}
 
 	for _, tt := range tests {
@@ -257,7 +234,6 @@ func TestEngine_EventFieldsWithEmptyValues(t *testing.T) {
 }
 
 func TestEngine_ErrorLogging(t *testing.T) {
-	// Use a test logger that captures logs
 	engine := NewEngine(zap.NewNop())
 
 	event := &eventing.MdaiEvent{
@@ -270,33 +246,16 @@ func TestEngine_ErrorLogging(t *testing.T) {
 		input         string
 		expectedError bool
 	}{
-		{
-			name:          "missing event field without default",
-			input:         "${trigger:nonexistent}",
-			expectedError: true,
-		},
-		{
-			name:          "missing payload field without default",
-			input:         "${trigger:payload.nonexistent}",
-			expectedError: true,
-		},
-		{
-			name:          "unsupported scope",
-			input:         "${env:PATH}",
-			expectedError: true,
-		},
-		{
-			name:          "valid field",
-			input:         "${trigger:id}",
-			expectedError: false,
-		},
+		{"missing event field without default", "${trigger:nonexistent}", true},
+		{"missing payload field without default", "${trigger:payload.nonexistent}", true},
+		{"unsupported scope", "${env:PATH}", true},
+		{"valid field", "${trigger:id}", false},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := engine.Interpolate(tt.input, event)
 			if tt.expectedError {
-				// Should return original input when error is logged
 				if result != tt.input {
 					t.Errorf("Expected original input %v, got %v", tt.input, result)
 				}
@@ -318,21 +277,9 @@ func TestEngine_NestedPayloadMissingPath(t *testing.T) {
 		input    string
 		expected string
 	}{
-		{
-			name:     "missing nested payload path with default",
-			input:    "${trigger:payload.user.age:-unknown}",
-			expected: "unknown",
-		},
-		{
-			name:     "missing root payload path with default",
-			input:    "${trigger:payload.config.setting:-default}",
-			expected: "default",
-		},
-		{
-			name:     "path through non-object in payload with default",
-			input:    "${trigger:payload.level.subfield:-default}",
-			expected: "default",
-		},
+		{"missing nested payload path with default", "${trigger:payload.user.age:-unknown}", "unknown"},
+		{"missing root payload path with default", "${trigger:payload.config.setting:-default}", "default"},
+		{"path through non-object in payload with default", "${trigger:payload.level.subfield:-default}", "default"},
 	}
 
 	for _, tt := range tests {
@@ -351,7 +298,7 @@ func TestEngine_EventFieldsOnly(t *testing.T) {
 	event := &eventing.MdaiEvent{
 		ID:      "test-id",
 		Name:    "test-event",
-		Payload: `{"name":"payload-name","id":"payload-id"}`, // Same keys as event fields
+		Payload: `{"name":"payload-name","id":"payload-id"}`,
 	}
 
 	tests := []struct {
@@ -359,31 +306,11 @@ func TestEngine_EventFieldsOnly(t *testing.T) {
 		input    string
 		expected string
 	}{
-		{
-			name:     "event name field (not payload)",
-			input:    "${trigger:name}",
-			expected: "test-event",
-		},
-		{
-			name:     "event id field (not payload)",
-			input:    "${trigger:id}",
-			expected: "test-id",
-		},
-		{
-			name:     "payload name field with prefix",
-			input:    "${trigger:payload.name}",
-			expected: "payload-name",
-		},
-		{
-			name:     "payload id field with prefix",
-			input:    "${trigger:payload.id}",
-			expected: "payload-id",
-		},
-		{
-			name:     "non-event field fails",
-			input:    "Value: ${trigger:custom_field:-default}",
-			expected: "Value: default",
-		},
+		{"event name field (not payload)", "${trigger:name}", "test-event"},
+		{"event id field (not payload)", "${trigger:id}", "test-id"},
+		{"payload name field with prefix", "${trigger:payload.name}", "payload-name"},
+		{"payload id field with prefix", "${trigger:payload.id}", "payload-id"},
+		{"non-event field fails", "Value: ${trigger:custom_field:-default}", "Value: default"},
 	}
 
 	for _, tt := range tests {
@@ -409,5 +336,135 @@ func TestEngine_PayloadRawField(t *testing.T) {
 	expected := "Raw: " + payloadContent
 	if result != expected {
 		t.Errorf("Interpolate() = %v, want %v", result, expected)
+	}
+}
+
+func TestEngine_TemplateScope_BasicAndDefaults(t *testing.T) {
+	engine := NewEngine(zap.NewNop())
+
+	tpl := map[string]string{
+		"service": "mdai_service",
+		"url":     "http://localhost:9090/alerts",
+	}
+
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{"basic template keys", "svc=${template:service} link=${template:url}", "svc=mdai_service link=http://localhost:9090/alerts"},
+		{"missing template key uses default", "x=${template:missing:-def}", "x=def"},
+		{"empty input", "", ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := engine.InterpolateWithValues(tt.input, nil, tpl)
+			if got != tt.expected {
+				t.Errorf("InterpolateWithValues() = %q, want %q", got, tt.expected)
+			}
+		})
+	}
+}
+
+func TestEngine_TemplateScope_EmptyStringFallsBackToDefault(t *testing.T) {
+	engine := NewEngine(zap.NewNop())
+
+	tpl := map[string]string{
+		"empty": "",
+	}
+	got := engine.InterpolateWithValues("${template:empty:-fallback}", nil, tpl)
+	if got != "fallback" {
+		t.Errorf("InterpolateWithValues() = %q, want %q", got, "fallback")
+	}
+}
+
+func TestEngine_TriggerAndTemplate_Together(t *testing.T) {
+	engine := NewEngine(zap.NewNop())
+
+	event := &eventing.MdaiEvent{
+		ID:     "abc-123",
+		Name:   "evt",
+		Source: "gateway",
+	}
+
+	tpl := map[string]string{
+		"service": "mdai_service",
+	}
+
+	input := "n=${trigger:name} s=${trigger:source} svc=${template:service} id=${trigger:id}"
+	want := "n=evt s=gateway svc=mdai_service id=abc-123"
+
+	got := engine.InterpolateWithValues(input, event, tpl)
+	if got != want {
+		t.Errorf("InterpolateWithValues() = %q, want %q", got, want)
+	}
+}
+
+func TestEngine_TemplateDoesNotShadowTrigger(t *testing.T) {
+	engine := NewEngine(zap.NewNop())
+
+	event := &eventing.MdaiEvent{
+		Name: "event-name",
+	}
+	tpl := map[string]string{
+		"name": "template-name",
+	}
+
+	got := engine.InterpolateWithValues("${trigger:name} / ${template:name}", event, tpl)
+	want := "event-name / template-name"
+	if got != want {
+		t.Errorf("InterpolateWithValues() = %q, want %q", got, want)
+	}
+}
+
+func TestEngine_InterpolateMapWithSources(t *testing.T) {
+	engine := NewEngine(zap.NewNop())
+
+	event := &eventing.MdaiEvent{
+		ID:     "id-1",
+		Source: "hub",
+	}
+	tpl := map[string]string{
+		"channel": "alerts",
+	}
+
+	in := map[string]string{
+		"a": "cid=${trigger:id}",
+		"b": "ch=${template:channel}",
+		"c": "src=${trigger:source} miss=${template:oops:-none}",
+	}
+	out := engine.InterpolateMapWithSources(in, TriggerSource{Event: event}, TemplateSource{Values: tpl})
+
+	if out["a"] != "cid=id-1" {
+		t.Errorf("map['a'] = %q, want %q", out["a"], "cid=id-1")
+	}
+	if out["b"] != "ch=alerts" {
+		t.Errorf("map['b'] = %q, want %q", out["b"], "ch=alerts")
+	}
+	if out["c"] != "src=hub miss=none" {
+		t.Errorf("map['c'] = %q, want %q", out["c"], "src=hub miss=none")
+	}
+}
+
+func TestEngine_InterpolateWithSources_UnknownScope(t *testing.T) {
+	engine := NewEngine(zap.NewNop())
+
+	input := "x=${unknown:key:-d}"
+	// With default, unknown scope will not be consulted; replaceMatchWithSources will see scope missing,
+	// log error, and return original match (since scope not supported). That means default is NOT applied.
+	got := engine.InterpolateWithSources(input /* no sources */)
+	if got != input {
+		t.Errorf("InterpolateWithSources() = %q, want %q", got, input)
+	}
+}
+
+func TestEngine_InterpolateWithValues_NilTemplateMap(t *testing.T) {
+	engine := NewEngine(zap.NewNop())
+
+	input := "x=${template:key:-fallback}"
+	got := engine.InterpolateWithValues(input, nil, nil)
+	if got != "x=fallback" {
+		t.Errorf("InterpolateWithValues() with nil map = %q, want %q", got, "x=fallback")
 	}
 }
