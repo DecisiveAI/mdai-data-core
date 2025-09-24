@@ -158,6 +158,11 @@ func (s *EventSubscriber) Subscribe(ctx context.Context, groupName string, dlqSu
 func (s *EventSubscriber) Close() error {
 	var err error
 	s.closeOnce.Do(func() {
+		close(s.closeCh)
+		if s.conn != nil {
+			_ = s.conn.FlushTimeout(2 * time.Second)
+		}
+
 		// Deregister from each elastic group we joined
 		for _, groupName := range s.joinedGroups {
 			members, dropErr := pcgroups.DeleteMembers(
@@ -183,7 +188,6 @@ func (s *EventSubscriber) Close() error {
 			}
 		}
 
-		close(s.closeCh)
 		if s.conn != nil && !s.conn.IsClosed() {
 			err = s.conn.Drain()
 		}

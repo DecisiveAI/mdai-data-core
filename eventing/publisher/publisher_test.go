@@ -281,6 +281,8 @@ func TestDuplicateSuppression(t *testing.T) {
 // TestSingleActiveMember verifies that after registering 10 members then disconnecting them,
 // the lone remaining subscriber receives all eventing across multiple keys.
 func TestSingleActiveMember(t *testing.T) {
+	t.Setenv("NATS_INACTIVE_THRESHOLD", "1ms")
+
 	srv, _ := runJetStream(t)
 	t.Cleanup(func() { srv.Shutdown() })
 

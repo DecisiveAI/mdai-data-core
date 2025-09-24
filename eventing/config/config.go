@@ -168,13 +168,13 @@ func Connect(ctx context.Context, cfg Config) (*nats.Conn, jetstream.JetStream, 
 		nats.ReconnectWait(reconnectWait),
 		nats.Name(cfg.ClientName),
 		nats.DisconnectErrHandler(func(_ *nats.Conn, err error) {
-			cfg.Logger.Error("NATS disconnect", zap.Error(err))
+			cfg.Logger.Debug("NATS disconnect", zap.Error(err))
 		}),
 		nats.ErrorHandler(func(_ *nats.Conn, _ *nats.Subscription, err error) {
-			cfg.Logger.Error("NATS async error", zap.Error(err))
+			cfg.Logger.Debug("NATS async error", zap.Error(err))
 		}),
 		nats.ClosedHandler(func(_ *nats.Conn) {
-			cfg.Logger.Warn("NATS connection closed")
+			cfg.Logger.Debug("NATS connection closed")
 		}),
 	}
 
