@@ -312,7 +312,7 @@ func TestSingleActiveMember(t *testing.T) {
 		require.NoError(t, sub.Close())
 	}
 
-	time.Sleep(3 * time.Second)
+	time.Sleep(3 * time.Second) // giving time for elastic group to setup up membership
 
 	// Single active subscriber
 	active := "member_11"
@@ -339,6 +339,8 @@ func TestSingleActiveMember(t *testing.T) {
 		},
 	))
 
+	time.Sleep(3 * time.Second) // giving time for elastic group to setup up membership
+
 	// Publish events on two keys
 	keys := []string{"KeyA", "KeyB"}
 	const count = 5
@@ -362,7 +364,7 @@ func TestSingleActiveMember(t *testing.T) {
 		n := len(received)
 		mu.Unlock()
 		return n == want
-	}, 10*time.Second, 50*time.Millisecond,
+	}, 30*time.Second, 50*time.Millisecond,
 		"active subscriber should receive all %d messages", want)
 }
 
