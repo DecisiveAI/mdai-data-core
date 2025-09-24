@@ -19,7 +19,7 @@ import (
 const (
 	dlqSuffix                   = ".dlq"
 	newSubscriberContextTimeout = 5 * time.Minute
-	subscribeContextTimeout     = 5 * time.Second
+	subscribeContextTimeout     = 10 * time.Second
 )
 
 type Subscriber interface {
