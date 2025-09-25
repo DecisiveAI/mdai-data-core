@@ -26,7 +26,7 @@ const (
 	maxPCGroupMembers           = 5
 
 	DefaultAckWait       = 30 * time.Second
-	DefaultMaxAckPending = 1
+	DefaultMaxAckPending = 1 // for strict ordering, only one message will be delivered per consumer
 	defaultDuplicates    = 2 * time.Minute
 	initialInterval      = 250 * time.Millisecond
 	maxInterval          = 60 * time.Second
@@ -168,13 +168,13 @@ func Connect(ctx context.Context, cfg Config) (*nats.Conn, jetstream.JetStream, 
 		nats.ReconnectWait(reconnectWait),
 		nats.Name(cfg.ClientName),
 		nats.DisconnectErrHandler(func(_ *nats.Conn, err error) {
-			cfg.Logger.Error("NATS disconnect", zap.Error(err))
+			cfg.Logger.Debug("NATS disconnect", zap.Error(err))
 		}),
 		nats.ErrorHandler(func(_ *nats.Conn, _ *nats.Subscription, err error) {
-			cfg.Logger.Error("NATS async error", zap.Error(err))
+			cfg.Logger.Debug("NATS async error", zap.Error(err))
 		}),
 		nats.ClosedHandler(func(_ *nats.Conn) {
-			cfg.Logger.Warn("NATS connection closed")
+			cfg.Logger.Debug("NATS connection closed")
 		}),
 	}
 

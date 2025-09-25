@@ -63,7 +63,7 @@ type HandlerInvoker func(event MdaiEvent) error
 // MdaiEvent represents an event in the system.
 type MdaiEvent struct {
 	ID            string    `json:"id,omitempty"`
-	Name          string    `json:"type"`    // e.g. "alert_firing"
+	Name          string    `json:"name"`    // e.g. "alert_firing"
 	Version       int       `json:"version"` // schema version
 	Timestamp     time.Time `json:"timestamp,omitempty"`
 	Payload       string    `json:"payload"`

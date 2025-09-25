@@ -45,14 +45,10 @@ func NewPublisher(ctx context.Context, logger *zap.Logger, clientName string) (*
 
 	cfg.Logger.Info("Publisher connected to NATS", zap.String("nats_url", cfg.URL))
 
+	// setup only stream from publisher, keep consumer group creation in subscribers
 	if err := config.EnsureStream(ctx, js, cfg); err != nil {
 		_ = conn.Drain()
 		return nil, fmt.Errorf("ensure stream: %w", err)
-	}
-
-	if err := config.EnsurePCGroup(ctx, js, cfg); err != nil {
-		_ = conn.Drain()
-		return nil, fmt.Errorf("ensure pcgroup: %w", err)
 	}
 
 	return &EventPublisher{cfg: cfg, logger: cfg.Logger, conn: conn, js: js}, nil
