@@ -26,7 +26,7 @@ const (
 	maxPCGroupMembers           = 5
 
 	DefaultAckWait       = 30 * time.Second
-	DefaultMaxAckPending = 1
+	DefaultMaxAckPending = 1 // for strict ordering, only one message will be delivered per consumer
 	defaultDuplicates    = 2 * time.Minute
 	initialInterval      = 250 * time.Millisecond
 	maxInterval          = 60 * time.Second

@@ -5,24 +5,14 @@ import (
 	"fmt"
 	"reflect"
 	"regexp"
+	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/decisiveai/mdai-data-core/eventing"
 	"go.uber.org/zap"
 )
-
-// Error represents an error during interpolation
-type Error struct {
-	Message string
-	Scope   string
-	Field   string
-	Value   any
-}
-
-func (e *Error) Error() string {
-	return e.Message
-}
 
 type ValueSource interface {
 	Scope() string
@@ -31,12 +21,26 @@ type ValueSource interface {
 
 // TriggerSource reads fields from MdaiEvent (incl. payload.* JSON path)
 type TriggerSource struct {
-	Event *eventing.MdaiEvent
+	Event       *eventing.MdaiEvent
+	payloadOnce sync.Once
+	payloadMap  map[string]any
+	payloadErr  error
 }
 
-func (s TriggerSource) Scope() string { return "trigger" }
-func (s TriggerSource) Lookup(field string) (string, bool) {
-	return getEventFieldValue(field, s.Event)
+func (s *TriggerSource) Scope() string { return "trigger" }
+
+func (s *TriggerSource) Lookup(field string) (string, bool) {
+	return getEventFieldValue(field, s)
+}
+
+func (s *TriggerSource) payload() (map[string]any, error) {
+	s.payloadOnce.Do(func() { // unmarshal once and cache
+		if s.Event == nil || s.Event.Payload == "" {
+			return
+		}
+		s.payloadMap, s.payloadErr = unmarshalPayloadUseNumber(s.Event.Payload)
+	})
+	return s.payloadMap, s.payloadErr
 }
 
 // TemplateSource reads from a flat map[string]string
@@ -45,6 +49,7 @@ type TemplateSource struct {
 }
 
 func (s TemplateSource) Scope() string { return "template" }
+
 func (s TemplateSource) Lookup(field string) (string, bool) {
 	if s.Values == nil {
 		return "", false
@@ -63,7 +68,7 @@ type Engine struct {
 }
 
 func NewEngine(logger *zap.Logger) *Engine {
-	pattern := regexp.MustCompile(`\$\{([^:]+):([^}:-]+)(?::-([^}]*))?}`)
+	pattern := regexp.MustCompile(`\$\{([^:}]+):([^}:]+)(?::-([^}]*))?}`)
 	return &Engine{
 		pattern: pattern,
 		logger:  logger,
@@ -73,13 +78,13 @@ func NewEngine(logger *zap.Logger) *Engine {
 // Interpolate processes a string and replaces interpolation expressions with actual values
 // Back-compat: only trigger scope via MdaiEvent
 func (e *Engine) Interpolate(input string, event *eventing.MdaiEvent) string {
-	return e.InterpolateWithSources(input, TriggerSource{Event: event})
+	return e.InterpolateWithSources(input, &TriggerSource{Event: event})
 }
 
 // InterpolateWithValues trigger + template scopes
 func (e *Engine) InterpolateWithValues(input string, event *eventing.MdaiEvent, templateValues map[string]string) string {
 	return e.InterpolateWithSources(input,
-		TriggerSource{Event: event},
+		&TriggerSource{Event: event},
 		TemplateSource{Values: templateValues},
 	)
 }
@@ -92,6 +97,16 @@ func (e *Engine) InterpolateWithSources(input string, sources ...ValueSource) st
 	scopeMap := make(map[string]ValueSource, len(sources))
 	for _, s := range sources {
 		if s == nil {
+			continue
+		}
+
+		sv := reflect.ValueOf(s)
+		if sv.Kind() == reflect.Ptr && sv.IsNil() {
+			continue
+		}
+
+		if _, exists := scopeMap[s.Scope()]; exists {
+			e.logger.Warn("duplicate scope in interpolation sources, skipping", zap.String("scope", s.Scope()))
 			continue
 		}
 		scopeMap[s.Scope()] = s
@@ -107,7 +122,7 @@ func (e *Engine) replaceMatchWithSources(match string, sources map[string]ValueS
 	matches := e.pattern.FindStringSubmatch(match)
 	if len(matches) < 3 {
 		e.logger.Error("failed to match regex, missing required elements",
-			zap.Bool("interpolation made", false),
+			zap.Bool("interpolation_made", false),
 			zap.String("match", match),
 		)
 		return match
@@ -122,8 +137,8 @@ func (e *Engine) replaceMatchWithSources(match string, sources map[string]ValueS
 
 	src, ok := sources[scope]
 	if !ok {
-		e.logger.Error(fmt.Sprintf("unsupported scope '%s'", scope),
-			zap.Bool("interpolation made", false),
+		e.logger.Error("unsupported scope",
+			zap.Bool("interpolation_made", false),
 			zap.String("match", match),
 			zap.String("scope", scope),
 			zap.String("field", field),
@@ -134,17 +149,16 @@ func (e *Engine) replaceMatchWithSources(match string, sources map[string]ValueS
 	val, found := src.Lookup(field)
 	if !found {
 		if defaultValue != "" {
-			e.logger.Warn(fmt.Sprintf("field '%s' not found, using default", field),
-				zap.Bool("interpolation made", true),
-				zap.String("match", match),
+			e.logger.Warn("field not found, using default",
+				zap.Bool("interpolation_made", true),
 				zap.String("scope", scope),
 				zap.String("field", field),
-				zap.String("defaultValue", defaultValue),
+				zap.String("default", defaultValue),
 			)
 			return defaultValue
 		}
-		e.logger.Error(fmt.Sprintf("field '%s' not found and no default value provided", field),
-			zap.Bool("interpolation made", false),
+		e.logger.Warn("field not found and no default value provided",
+			zap.Bool("interpolation_made", false),
 			zap.String("match", match),
 			zap.String("scope", scope),
 			zap.String("field", field),
@@ -153,11 +167,11 @@ func (e *Engine) replaceMatchWithSources(match string, sources map[string]ValueS
 	}
 
 	e.logger.Info("interpolation succeeded",
-		zap.Bool("interpolation made", true),
+		zap.Bool("interpolation_made", true),
 		zap.String("match", match),
 		zap.String("scope", scope),
 		zap.String("field", field),
-		zap.String("value", fmt.Sprintf("%v", val)),
+		zap.String("value", val),
 	)
 
 	return val
@@ -165,6 +179,9 @@ func (e *Engine) replaceMatchWithSources(match string, sources map[string]ValueS
 
 // InterpolateMapWithSources interpolate map with arbitrary sources (e.g., trigger+template)
 func (e *Engine) InterpolateMapWithSources(in map[string]string, sources ...ValueSource) map[string]string {
+	if in == nil {
+		return nil
+	}
 	out := make(map[string]string, len(in))
 	for k, v := range in {
 		if v == "" {
@@ -176,36 +193,29 @@ func (e *Engine) InterpolateMapWithSources(in map[string]string, sources ...Valu
 	return out
 }
 
-func convertToString(value any) string {
-	if value == nil {
+// JSON-only stringifier (types produced by json.Unmarshal into interface{}).
+func convertToString(v any) string {
+	if v == nil {
 		return ""
 	}
-	switch v := value.(type) {
+	switch x := v.(type) {
 	case string:
-		return v
-	case int, int32, int64:
-		return fmt.Sprintf("%d", v)
-	case float32, float64:
-		return fmt.Sprintf("%g", v)
+		return x
 	case bool:
-		return fmt.Sprintf("%t", v)
-	case time.Time:
-		return v.Format(time.RFC3339)
+		return strconv.FormatBool(x)
+	case float64: // for legacy paths without UseNumber
+		return strconv.FormatFloat(x, 'g', -1, 64)
+	case json.Number: // preserves original formatting
+		return x.String()
 	case map[string]any, []any:
-		if jsonBytes, err := json.Marshal(v); err == nil {
-			return string(jsonBytes)
+		if b, err := json.Marshal(x); err == nil {
+			return string(b)
 		}
-		return fmt.Sprintf("%v", v)
-	default:
-		rv := reflect.ValueOf(value)
-		if rv.Kind() == reflect.String {
-			return rv.String()
-		}
-		return fmt.Sprintf("%v", value)
 	}
+	return fmt.Sprint(v)
 }
 
-func getNestedValue(data map[string]interface{}, path string) (any, bool) {
+func getNestedValue(data map[string]any, path string) (any, bool) {
 	parts := strings.Split(path, ".")
 	current := data
 
@@ -218,7 +228,7 @@ func getNestedValue(data map[string]interface{}, path string) (any, bool) {
 		if i == len(parts)-1 {
 			return value, true
 		}
-		nextMap, ok := value.(map[string]interface{})
+		nextMap, ok := value.(map[string]any)
 		if !ok {
 			return nil, false
 		}
@@ -228,25 +238,22 @@ func getNestedValue(data map[string]interface{}, path string) (any, bool) {
 	return nil, false
 }
 
-func getPayloadValue(field string, event *eventing.MdaiEvent) (string, bool) {
-	if event.Payload == "" {
-		return "", false
+func unmarshalPayloadUseNumber(raw string) (map[string]any, error) {
+	dec := json.NewDecoder(strings.NewReader(raw))
+	dec.UseNumber()
+	var m map[string]any
+	if err := dec.Decode(&m); err != nil {
+		return nil, err
 	}
-
-	var payloadMap map[string]interface{}
-	if err := json.Unmarshal([]byte(event.Payload), &payloadMap); err != nil {
-		return "", false
-	}
-
-	value, found := getNestedValue(payloadMap, field)
-	if !found {
-		return "", false
-	}
-
-	return convertToString(value), true
+	return m, nil
 }
 
-func getEventFieldValue(field string, event *eventing.MdaiEvent) (string, bool) {
+func getEventFieldValue(field string, ts *TriggerSource) (string, bool) {
+	if ts == nil {
+		return "", false
+	}
+
+	event := ts.Event
 	if event == nil {
 		return "", false
 	}
@@ -278,7 +285,15 @@ func getEventFieldValue(field string, event *eventing.MdaiEvent) (string, bool) 
 	}
 
 	if strings.HasPrefix(field, "payload.") {
-		return getPayloadValue(strings.TrimPrefix(field, "payload."), event)
+		payload, err := ts.payload()
+		if err != nil || payload == nil {
+			return "", false
+		}
+		value, ok := getNestedValue(payload, strings.TrimPrefix(field, "payload."))
+		if !ok {
+			return "", false
+		}
+		return convertToString(value), true
 	}
 
 	return "", false

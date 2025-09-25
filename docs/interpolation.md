@@ -1,18 +1,26 @@
 # Interpolation Engine
 
-The interpolation engine provides a mechanism to dynamically replace placeholders in a string with values from an `eventing.MdaiEvent`. It is inspired by similar concepts in OpenTelemetry and other observability tools.
+The interpolation engine replaces placeholders in strings with values from one or more value sources. It is inspired by OpenTelemetry-style attribute interpolation.   
+* Placeholders use the form: ${scope:field:-default}   
+* Multiple sources may be supplied; one provider per scope is used (first-wins; later duplicates are ignored with a warning).
 
 ## Syntax
 
 The interpolation syntax follows a simple pattern:
-`${scope:field:-defaultValue}
-`
+`${scope:field:-defaultValue}`
 
 - **`scope`**: The source of the data. Currently, the only supported scope is `trigger`.
 - **`field`**: The path to the value you want to retrieve from the event. This can be a top-level event attribute or a nested path within the event's JSON payload.
-- **`defaultValue`**: (Optional) A fallback value to use if the specified `field` cannot be found or its value is considered "empty" (e.g., an empty string or a zero-value timestamp).
+- **`:-defaultValue`**: (Optional) A fallback value to use if the specified `field` cannot be found or its value is considered "empty" (e.g., an empty string or a zero-value timestamp).
 
 ---
+## Supported Scope: `template`
+
+The `template` scope allows access to predefined key-value pairs.
+
+### Usage
+
+Template values are provided as a `map[string]string` when calling the interpolation function. You can then reference these values using the `template` scope in your interpolation strings.
 
 ## Supported Scope: `trigger`
 
@@ -56,18 +64,30 @@ To access values within the event's JSON payload, use the `payload.` prefix foll
 
 Example Interpolations:  
 
-| Input String                          | Resulting String          | Description                                       |
-|---------------------------------------|---------------------------|---------------------------------------------------|
-| `${trigger:payload.level}`            | `info`                    | Access a top-level key in the payload.            |
-| `${trigger:payload.user.name}`        | `John`                    | Access a nested key.                              |
-| `${trigger:payload.user.details.age}` | `30`                      | Access a deeply nested key.                       |
-| `${trigger:payload.tags}`             | `["a","b"]`               | An array is returned as a JSON string.            |
-| `${trigger:payload.user}`             | `{"name":"John",...}`     | An object is returned as a JSON string.           |
+| Input String                          | Resulting String     | Description                             |
+|---------------------------------------|----------------------|-----------------------------------------|
+| `${trigger:payload.level}`            | `info`               | Access a top-level key in the payload.  |
+| `${trigger:payload.user.name}`        | `John`               | Access a nested key.                    |
+| `${trigger:payload.user.details.age}` | `30`                 | Access a deeply nested key.             |
+| `${trigger:payload.tags}`             | `["a","b"]`          | An array is returned as a JSON string.  |
+| `${trigger:payload.user}`             | `{"name":"John",...}`| An object is returned as a JSON string. |
+| `${trigger:payload.error-rate}`       | `high`               | Hyphenated key supported                |
 
-### Default Values
-You can provide a default value using the :- syntax. The default value is used in the following cases:  
-1. The specified field does not exist (e.g., ${trigger:payload.nonexistent:-default}).
-2. The field exists but its value is considered empty (e.g., an empty string for Name or a zero-value for Timestamp). 
+#### Number formatting
+* The payload is decoded with json.Decoder.UseNumber().
+* If a number arrives as a json.Number, its lexical form is preserved:
+  * ${trigger:payload.n_lex} → 1.00
+* Legacy/other numeric values format compactly ('g'):
+  * ${trigger:payload.n_int} → 42
+  * ${trigger:payload.n_float} → 3.14
+### Default  & “absent” semantics
+A default (:-value) is used when the field is **present but resolves to “absent”** or when the field path **does not exist** within a supported scope.  
+
+A value is considered **absent** when:
+* template value is "" (empty string).
+* Event top-level field is empty (e.g., Name == "") or Timestamp is zero.
+* JSON path lookup fails within payload (missing key, invalid path, non-object path traversal).
+* Payload is invalid JSON (for payload.* retrievals only).
 
 Examples:  
 
@@ -77,10 +97,7 @@ Examples:
 | `Name: ${trigger:name:-guest}`             | `event.Name` is an empty string.        | `Name: guest`    |  
 | `Time: ${trigger:timestamp:-now}`          | `event.Timestamp` is a zero time.       | `Time: now`      |  
 
-If a field is not found and no default value is provided, the original placeholder is returned.
-`Input`: Status: ${trigger:payload.status}  
-`Result`: Status: ${trigger:payload.status}  
-### Edge Cases 
-`Invalid JSON Payload`: If the event payload is not valid JSON, any attempt to access a payload field (e.g., ${trigger:payload.user}) will fail, and the default value (or the original placeholder) will be used.  
-`Nil Event`: If the event object passed to the Interpolate function is nil, all interpolations will use their default value.  
-`Type Conversion`: All retrieved values, regardless of their original type (number, boolean, object, array), are converted to a string before being inserted into the final output. Objects and arrays are marshaled into their JSON string representation.  
+#### Unsupported or missing scope
+If the scope has no provider (e.g., no trigger source was supplied, or a typo like env), the placeholder is left unchanged, even if a default is present.
+* x=${unknown:key:-d} → x=${unknown:key:-d}  
+* x=${trigger:id:-fallback} (no trigger source provided) → x=${trigger:id:-fallback}

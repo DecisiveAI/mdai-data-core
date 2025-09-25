@@ -20,6 +20,7 @@ const (
 	dlqSuffix                   = ".dlq"
 	newSubscriberContextTimeout = 5 * time.Minute
 	subscribeContextTimeout     = 10 * time.Second
+	deregisterContextTimeout    = 60 * time.Second
 )
 
 type Subscriber interface {
@@ -34,13 +35,14 @@ type EventSubscriber struct {
 	jetStream jetstream.JetStream
 
 	waitGroup sync.WaitGroup
-	closeCh   chan struct{}
 	closeOnce sync.Once
 
 	memberID string
 
 	joinedGroups []string // assuming no duplicates subscriptions created
-	runOnce      sync.Once
+
+	consumers map[string]pcgroups.ConsumerGroupConsumeContext
+	mu        sync.Mutex
 }
 
 func NewSubscriber(ctx context.Context, logger *zap.Logger, clientName string) (*EventSubscriber, error) {
@@ -71,16 +73,19 @@ func NewSubscriber(ctx context.Context, logger *zap.Logger, clientName string) (
 		return nil, fmt.Errorf("ensure pcgroup: %w", err)
 	}
 
-	return &EventSubscriber{
+	s := &EventSubscriber{
 		cfg:       cfg,
 		logger:    cfg.Logger,
 		conn:      conn,
 		jetStream: js,
-		closeCh:   make(chan struct{}),
 		memberID:  config.GetMemberIDs(),
-	}, nil
+		consumers: make(map[string]pcgroups.ConsumerGroupConsumeContext),
+	}
+	return s, nil
 }
 
+// Subscribe to a NATS subject and handle incoming messages.
+// process incoming messages using the provided handler in strict order
 func (s *EventSubscriber) Subscribe(ctx context.Context, groupName string, dlqSubject string, invoker eventing.HandlerInvoker) error {
 	if groupName == "" {
 		return errors.New("groupName is required")
@@ -123,34 +128,23 @@ func (s *EventSubscriber) Subscribe(ctx context.Context, groupName string, dlqSu
 		s.handleMessage(ctx, msg, fullDlqSubject, invoker)
 	}
 
-	if _, err := pcgroups.ElasticConsume(
+	cons, err := pcgroups.ElasticConsume(
 		ctx,
-		s.jetStream,
-		s.cfg.StreamName,
-		groupName,
-		memberID,
-		handler,
-		consumerConfig,
-	); err != nil {
+		s.jetStream, s.cfg.StreamName, groupName, s.memberID, handler, consumerConfig,
+	)
+	if err != nil {
 		return fmt.Errorf("ElasticConsume(%s): %w", groupName, err)
 	}
+
+	s.mu.Lock()
+	s.consumers[groupName] = cons
 	s.joinedGroups = append(s.joinedGroups, groupName)
+	s.mu.Unlock()
+
 	s.logger.Info("Consumer started",
 		zap.String("group", groupName),
 		zap.String("prefix", s.cfg.Subject),
 	)
-
-	// Start the shutdown waiter once
-	s.runOnce.Do(func() {
-		go func() {
-			select {
-			case <-ctx.Done():
-			case <-s.closeCh:
-			}
-			s.logger.Info("shutting down subscriber")
-			s.waitGroup.Wait()
-		}()
-	})
 
 	return nil
 }
@@ -158,15 +152,25 @@ func (s *EventSubscriber) Subscribe(ctx context.Context, groupName string, dlqSu
 func (s *EventSubscriber) Close() error {
 	var err error
 	s.closeOnce.Do(func() {
-		close(s.closeCh)
-		if s.conn != nil {
-			_ = s.conn.FlushTimeout(2 * time.Second)
+		// Stop consume instances (this just cancels their contexts)
+		s.mu.Lock()
+		for name, c := range s.consumers {
+			if c != nil {
+				c.Stop()
+				s.logger.Info("consumer stopped", zap.String("group", name))
+			}
 		}
+		s.mu.Unlock()
+
+		// Wait for in-flight handlers to finish their work/acks
+		s.waitGroup.Wait()
 
 		// Deregister from each elastic group we joined
+		deregisterCtx, cancel := context.WithTimeout(context.Background(), deregisterContextTimeout)
+		defer cancel()
 		for _, groupName := range s.joinedGroups {
 			members, dropErr := pcgroups.DeleteMembers(
-				context.Background(),
+				deregisterCtx,
 				s.jetStream,
 				s.cfg.StreamName,
 				groupName,

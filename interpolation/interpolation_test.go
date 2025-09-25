@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/decisiveai/mdai-data-core/eventing"
+	"github.com/stretchr/testify/assert"
 	"go.uber.org/zap"
 )
 
@@ -40,6 +41,30 @@ func TestEngine_Interpolate(t *testing.T) {
 			input:    "Event: ${trigger:name}",
 			expected: "Event: test-event",
 			event:    event,
+		},
+		{
+			name:     "event name field with default (not used)",
+			input:    "Event: ${trigger:name:-default-event}",
+			expected: "Event: test-event",
+			event:    event,
+		},
+		{
+			name:     "event name field (empty)",
+			input:    "Event: ${trigger:name}",
+			expected: "Event: ${trigger:name}",
+			event:    &eventing.MdaiEvent{ID: "test-id", Name: ""},
+		},
+		{
+			name:     "event name field (empty) with default",
+			input:    "Event: ${trigger:name:-default-event}",
+			expected: "Event: default-event",
+			event:    &eventing.MdaiEvent{ID: "test-id", Name: ""},
+		},
+		{
+			name:     "event name field (nil event)",
+			input:    "Event: ${trigger:name:-no-event}",
+			expected: "Event: no-event",
+			event:    nil,
 		},
 		{
 			name:     "timestamp field",
@@ -143,20 +168,12 @@ func TestEngine_Interpolate(t *testing.T) {
 			expected: "Value: default",
 			event:    &eventing.MdaiEvent{Payload: "{invalid json}"},
 		},
-		{
-			name:     "unsupported scope",
-			input:    "Value: ${env:PATH}",
-			expected: "Value: ${env:PATH}",
-			event:    event,
-		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := engine.Interpolate(tt.input, tt.event)
-			if result != tt.expected {
-				t.Errorf("Interpolate() = %v, want %v", result, tt.expected)
-			}
+			assert.Equal(t, tt.expected, result)
 		})
 	}
 }
@@ -192,9 +209,7 @@ func TestEngine_ComplexPayloadValues(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := engine.Interpolate(tt.input, event)
-			if result != tt.expected {
-				t.Errorf("Interpolate() = %v, want %v", result, tt.expected)
-			}
+			assert.Equal(t, tt.expected, result)
 		})
 	}
 }
@@ -226,9 +241,7 @@ func TestEngine_EventFieldsWithEmptyValues(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := engine.Interpolate(tt.input, event)
-			if result != tt.expected {
-				t.Errorf("Interpolate() = %v, want %v", result, tt.expected)
-			}
+			assert.Equal(t, tt.expected, result)
 		})
 	}
 }
@@ -256,9 +269,7 @@ func TestEngine_ErrorLogging(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			result := engine.Interpolate(tt.input, event)
 			if tt.expectedError {
-				if result != tt.input {
-					t.Errorf("Expected original input %v, got %v", tt.input, result)
-				}
+				assert.Equal(t, tt.input, result, "Expected original input")
 			}
 		})
 	}
@@ -285,9 +296,7 @@ func TestEngine_NestedPayloadMissingPath(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := engine.Interpolate(tt.input, event)
-			if result != tt.expected {
-				t.Errorf("Interpolate() = %v, want %v", result, tt.expected)
-			}
+			assert.Equal(t, tt.expected, result)
 		})
 	}
 }
@@ -316,9 +325,7 @@ func TestEngine_EventFieldsOnly(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := engine.Interpolate(tt.input, event)
-			if result != tt.expected {
-				t.Errorf("Interpolate() = %v, want %v", result, tt.expected)
-			}
+			assert.Equal(t, tt.expected, result)
 		})
 	}
 }
@@ -334,9 +341,7 @@ func TestEngine_PayloadRawField(t *testing.T) {
 
 	result := engine.Interpolate("Raw: ${trigger:payload}", event)
 	expected := "Raw: " + payloadContent
-	if result != expected {
-		t.Errorf("Interpolate() = %v, want %v", result, expected)
-	}
+	assert.Equal(t, expected, result)
 }
 
 func TestEngine_TemplateScope_BasicAndDefaults(t *testing.T) {
@@ -360,9 +365,7 @@ func TestEngine_TemplateScope_BasicAndDefaults(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := engine.InterpolateWithValues(tt.input, nil, tpl)
-			if got != tt.expected {
-				t.Errorf("InterpolateWithValues() = %q, want %q", got, tt.expected)
-			}
+			assert.Equal(t, tt.expected, got)
 		})
 	}
 }
@@ -374,9 +377,7 @@ func TestEngine_TemplateScope_EmptyStringFallsBackToDefault(t *testing.T) {
 		"empty": "",
 	}
 	got := engine.InterpolateWithValues("${template:empty:-fallback}", nil, tpl)
-	if got != "fallback" {
-		t.Errorf("InterpolateWithValues() = %q, want %q", got, "fallback")
-	}
+	assert.Equal(t, "fallback", got)
 }
 
 func TestEngine_TriggerAndTemplate_Together(t *testing.T) {
@@ -396,9 +397,7 @@ func TestEngine_TriggerAndTemplate_Together(t *testing.T) {
 	want := "n=evt s=gateway svc=mdai_service id=abc-123"
 
 	got := engine.InterpolateWithValues(input, event, tpl)
-	if got != want {
-		t.Errorf("InterpolateWithValues() = %q, want %q", got, want)
-	}
+	assert.Equal(t, want, got)
 }
 
 func TestEngine_TemplateDoesNotShadowTrigger(t *testing.T) {
@@ -413,9 +412,7 @@ func TestEngine_TemplateDoesNotShadowTrigger(t *testing.T) {
 
 	got := engine.InterpolateWithValues("${trigger:name} / ${template:name}", event, tpl)
 	want := "event-name / template-name"
-	if got != want {
-		t.Errorf("InterpolateWithValues() = %q, want %q", got, want)
-	}
+	assert.Equal(t, want, got)
 }
 
 func TestEngine_InterpolateMapWithSources(t *testing.T) {
@@ -434,29 +431,14 @@ func TestEngine_InterpolateMapWithSources(t *testing.T) {
 		"b": "ch=${template:channel}",
 		"c": "src=${trigger:source} miss=${template:oops:-none}",
 	}
-	out := engine.InterpolateMapWithSources(in, TriggerSource{Event: event}, TemplateSource{Values: tpl})
+	out := engine.InterpolateMapWithSources(in, &TriggerSource{Event: event}, TemplateSource{Values: tpl})
 
-	if out["a"] != "cid=id-1" {
-		t.Errorf("map['a'] = %q, want %q", out["a"], "cid=id-1")
+	expected := map[string]string{
+		"a": "cid=id-1",
+		"b": "ch=alerts",
+		"c": "src=hub miss=none",
 	}
-	if out["b"] != "ch=alerts" {
-		t.Errorf("map['b'] = %q, want %q", out["b"], "ch=alerts")
-	}
-	if out["c"] != "src=hub miss=none" {
-		t.Errorf("map['c'] = %q, want %q", out["c"], "src=hub miss=none")
-	}
-}
-
-func TestEngine_InterpolateWithSources_UnknownScope(t *testing.T) {
-	engine := NewEngine(zap.NewNop())
-
-	input := "x=${unknown:key:-d}"
-	// With default, unknown scope will not be consulted; replaceMatchWithSources will see scope missing,
-	// log error, and return original match (since scope not supported). That means default is NOT applied.
-	got := engine.InterpolateWithSources(input /* no sources */)
-	if got != input {
-		t.Errorf("InterpolateWithSources() = %q, want %q", got, input)
-	}
+	assert.Equal(t, expected, out)
 }
 
 func TestEngine_InterpolateWithValues_NilTemplateMap(t *testing.T) {
@@ -464,7 +446,153 @@ func TestEngine_InterpolateWithValues_NilTemplateMap(t *testing.T) {
 
 	input := "x=${template:key:-fallback}"
 	got := engine.InterpolateWithValues(input, nil, nil)
-	if got != "x=fallback" {
-		t.Errorf("InterpolateWithValues() with nil map = %q, want %q", got, "x=fallback")
+	assert.Equal(t, "x=fallback", got, "InterpolateWithValues() with nil map should use default")
+}
+
+func TestEngine_InterpolateWithSources(t *testing.T) {
+	engine := NewEngine(zap.NewNop())
+
+	source1 := TemplateSource{Values: map[string]string{"key": "value1"}}
+	source2 := TemplateSource{Values: map[string]string{"key": "value2"}}
+	var nilSource ValueSource
+
+	tests := []struct {
+		name     string
+		input    string
+		sources  []ValueSource
+		expected string
+	}{
+		{
+			name:     "unknown scope",
+			input:    "x=${unknown:key:-d}",
+			sources:  []ValueSource{},
+			expected: "x=${unknown:key:-d}",
+		},
+		{
+			name:     "duplicate scope uses first",
+			input:    "Result: ${template:key}",
+			sources:  []ValueSource{source1, source2},
+			expected: "Result: value1",
+		},
+		{
+			name:     "duplicate scope uses first (reversed)",
+			input:    "Result: ${template:key}",
+			sources:  []ValueSource{source2, source1},
+			expected: "Result: value2",
+		},
+		{
+			name:     "empty input",
+			input:    "",
+			sources:  []ValueSource{},
+			expected: "",
+		},
+		{
+			name:     "mixed valid and nil sources",
+			input:    "Result: ${template:key}",
+			sources:  []ValueSource{nilSource, source1},
+			expected: "Result: value1",
+		},
+		{
+			name:     "mixed valid and nil sources (reversed)",
+			input:    "Result: ${template:key}",
+			sources:  []ValueSource{source1, nilSource},
+			expected: "Result: value1",
+		},
 	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := engine.InterpolateWithSources(tt.input, tt.sources...)
+			assert.Equal(t, tt.expected, got)
+		})
+	}
+}
+
+func TestEngine_ReplaceMatchWithSources_InvalidSyntax(t *testing.T) {
+	engine := NewEngine(zap.NewNop())
+
+	// This input is invalid because it's missing the colon between scope and field.
+	invalidMatch := "${trigger-id}"
+
+	// The function should return the original string if the regex doesn't match.
+	result := engine.replaceMatchWithSources(invalidMatch, nil)
+
+	assert.Equal(t, invalidMatch, result, "Expected original string for invalid syntax")
+}
+
+func TestEngine_ReplaceMatchWithSources_NonStringValue(t *testing.T) {
+	engine := NewEngine(zap.NewNop())
+
+	event := &eventing.MdaiEvent{
+		ID:      "test-id",
+		Payload: `{"value": 12345}`,
+	}
+
+	sources := map[string]ValueSource{
+		"trigger": &TriggerSource{Event: event},
+	}
+
+	// Simulate the call from ReplaceAllStringFunc
+	result := engine.replaceMatchWithSources("${trigger:payload.value}", sources)
+
+	assert.Equal(t, "12345", result, "should correctly format the integer value to a string")
+}
+
+func TestConvertToString_JSONUnmarshalTypes(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    any
+		expected string
+	}{
+		{"string", "hello", "hello"},
+		{"float64 (int-like)", float64(123), "123"}, // json numbers -> float64
+		{"float64 (decimal)", 3.14, "3.14"},
+		{"bool true", true, "true"},
+		{"bool false", false, "false"},
+		{"nil", nil, ""},
+		{"json object as map", map[string]any{"k": "v"}, `{"k":"v"}`},
+		{"json array as slice", []any{1.0, "x", false}, `[1,"x",false]`},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := convertToString(tt.input)
+			assert.Equal(t, tt.expected, got)
+		})
+	}
+}
+
+func TestConvertToString_NumberFormatting(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    any
+		expected string
+	}{
+		{"int-like as float64", float64(1), "1"},
+		{"decimal no padding", 1.5, "1.5"},
+		{"large but not scientific", 123456.0, "123456"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := convertToString(tt.input)
+			assert.Equal(t, tt.expected, got)
+		})
+	}
+}
+
+func TestEngine_PayloadHyphenKey(t *testing.T) {
+	e := NewEngine(zap.NewNop())
+	ev := &eventing.MdaiEvent{Payload: `{"error-rate":"high"}`}
+
+	got := e.Interpolate("rate=${trigger:payload.error-rate}", ev)
+	assert.Equal(t, "rate=high", got)
+}
+
+func TestEngine_PayloadNumberLexicalForm(t *testing.T) {
+	e := NewEngine(zap.NewNop())
+	ev := &eventing.MdaiEvent{Payload: `{"n": 1.00}`}
+
+	got := e.Interpolate("${trigger:payload.n}", ev)
+	assert.Equal(t, "1.00", got)
 }
