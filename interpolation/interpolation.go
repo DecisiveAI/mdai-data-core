@@ -281,6 +281,8 @@ func getEventFieldValue(field string, ts *TriggerSource) (string, bool) {
 			return event.CorrelationID, event.CorrelationID != ""
 		case "hub_name":
 			return event.HubName, event.HubName != ""
+		case "recursion_depth":
+			return strconv.Itoa(event.RecursionDepth), true
 		}
 	}
 

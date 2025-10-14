@@ -2,12 +2,17 @@ package handlers
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"iter"
+	"strconv"
 	"strings"
 	"time"
 
+	"github.com/cenkalti/backoff/v5"
+	"github.com/decisiveai/mdai-data-core/eventing"
+	"github.com/decisiveai/mdai-data-core/eventing/publisher"
 	"go.uber.org/zap"
 
 	"github.com/decisiveai/mdai-data-core/audit"
@@ -27,72 +32,91 @@ type HandlerAdapter struct {
 	client        valkey.Client
 	logger        *zap.Logger
 	valkeyAdapter *variables.ValkeyAdapter
+	publisher     publisher.Publisher
 }
 
 // NewHandlerAdapter creates a new wrapper for handling variable operations.
-func NewHandlerAdapter(client valkey.Client, logger *zap.Logger, opts ...variables.ValkeyAdapterOption) *HandlerAdapter {
+func NewHandlerAdapter(client valkey.Client, logger *zap.Logger, pub publisher.Publisher, opts ...variables.ValkeyAdapterOption) *HandlerAdapter {
 	va := variables.NewValkeyAdapter(client, logger, opts...)
 	ha := &HandlerAdapter{
 		client:        client,
 		logger:        logger,
 		valkeyAdapter: va,
+		publisher:     pub,
 	}
 
 	return ha
 }
 
 // AddElementToSet adds an element to a Set data type and logs an audit entry.
-func (r *HandlerAdapter) AddElementToSet(ctx context.Context, variableKey string, hubName string, value string, correlationId string) error {
+func (r *HandlerAdapter) AddElementToSet(ctx context.Context, variableKey string, hubName string, value string, correlationId string, recursionDepth int) error {
 	variableUpdateCommand := r.valkeyAdapter.AddElementToSet(variableKey, hubName, value)
 
 	auditEntry := makeAuditEntry(variableKey, value, correlationId, "Add element to set")
 	auditLogCommand := r.makeVariableAuditLogActionCommand(auditEntry)
 
-	return r.executeAuditedUpdateCommand(ctx, variableKey, variableUpdateCommand, auditLogCommand)
+	if err := r.executeAuditedUpdateCommand(ctx, variableKey, variableUpdateCommand, auditLogCommand); err != nil {
+		return err
+	}
+	return retryWithBackoff(ctx, func() error {
+		return r.publishVarUpdate(ctx, hubName, variableKey, "set", "added", value, correlationId, "eventhub", recursionDepth)
+	}, 10*time.Second)
 }
 
 // RemoveElementFromSet removes an element from a Set data type and logs an audit entry.
-func (r *HandlerAdapter) RemoveElementFromSet(ctx context.Context, variableKey string, hubName string, value string, correlationId string) error {
+func (r *HandlerAdapter) RemoveElementFromSet(ctx context.Context, variableKey string, hubName string, value string, correlationId string, recursionDepth int) error {
 	variableUpdateCommand := r.valkeyAdapter.RemoveElementFromSet(variableKey, hubName, value)
 
 	auditEntry := makeAuditEntry(variableKey, value, correlationId, "Remove element from set")
 	auditLogCommand := r.makeVariableAuditLogActionCommand(auditEntry)
 
-	return r.executeAuditedUpdateCommand(ctx, variableKey, variableUpdateCommand, auditLogCommand)
+	if err := r.executeAuditedUpdateCommand(ctx, variableKey, variableUpdateCommand, auditLogCommand); err != nil {
+		return err
+	}
+	return r.publishVarUpdate(ctx, hubName, variableKey, "set", "remove", value, correlationId, "eventhub", recursionDepth)
 }
 
 // SetMapEntry sets a field-value pair in a map data type and logs an audit entry.
 // It is using Valkey's HSET command on a Hash data type under the hood.
 // This command overwrites the values of specified fields that exist in the hash.
 // If key doesn't exist, a new key holding a hash is created.
-func (r *HandlerAdapter) SetMapEntry(ctx context.Context, variableKey string, hubName string, field string, value string, correlationId string) error {
+func (r *HandlerAdapter) SetMapEntry(ctx context.Context, variableKey string, hubName string, field string, value string, correlationId string, recursionDepth int) error {
 	variableUpdateCommand := r.valkeyAdapter.SetMapEntry(variableKey, hubName, field, value)
 
 	auditEntry := makeAuditEntry(variableKey, value, correlationId, "Set map entry")
 	auditLogCommand := r.makeVariableAuditLogActionCommand(auditEntry)
 
-	return r.executeAuditedUpdateCommand(ctx, variableKey, variableUpdateCommand, auditLogCommand)
+	if err := r.executeAuditedUpdateCommand(ctx, variableKey, variableUpdateCommand, auditLogCommand); err != nil {
+		return err
+	}
+	return r.publishVarUpdate(ctx, hubName, variableKey, "map", "set", value, correlationId, "eventhub", recursionDepth)
 }
 
 // RemoveMapEntry removes a field from a map data type and logs an audit entry.
 // It uses Valkey's HDEL command on a Hash data type under the hood.
-func (r *HandlerAdapter) RemoveMapEntry(ctx context.Context, variableKey string, hubName string, field string, correlationId string) error {
+func (r *HandlerAdapter) RemoveMapEntry(ctx context.Context, variableKey string, hubName string, field string, correlationId string, recursionDepth int) error {
 	variableUpdateCommand := r.valkeyAdapter.RemoveMapEntry(variableKey, hubName, field)
 
 	auditEntry := makeAuditEntry(variableKey, field, correlationId, "Remove element from set")
 	auditLogCommand := r.makeVariableAuditLogActionCommand(auditEntry)
 
-	return r.executeAuditedUpdateCommand(ctx, variableKey, variableUpdateCommand, auditLogCommand)
+	if err := r.executeAuditedUpdateCommand(ctx, variableKey, variableUpdateCommand, auditLogCommand); err != nil {
+		return err
+	}
+	return r.publishVarUpdate(ctx, hubName, variableKey, "map", "remove", field, correlationId, "eventhub", recursionDepth)
 }
 
 // SetStringValue sets a string value and logs an audit entry.
-func (r *HandlerAdapter) SetStringValue(ctx context.Context, variableKey string, hubName string, value string, correlationId string) error {
+func (r *HandlerAdapter) SetStringValue(ctx context.Context, variableKey string, hubName string, value string, correlationId string, recursionDepth int) error {
 	variableUpdateCommand := r.valkeyAdapter.SetString(variableKey, hubName, value)
 
 	auditEntry := makeAuditEntry(variableKey, value, correlationId, "Set string value")
 	auditLogCommand := r.makeVariableAuditLogActionCommand(auditEntry)
 
-	return r.executeAuditedUpdateCommand(ctx, variableKey, variableUpdateCommand, auditLogCommand)
+	if err := r.executeAuditedUpdateCommand(ctx, variableKey, variableUpdateCommand, auditLogCommand); err != nil {
+		return err
+	}
+	return r.publishVarUpdate(ctx, hubName, variableKey, "string", "set", value, correlationId, "eventhub", recursionDepth)
 }
 
 func (r *HandlerAdapter) executeAuditedUpdateCommand(ctx context.Context, variableKey string, variableUpdateCommand valkey.Completed, auditLogCommand valkey.Completed) error {
@@ -119,6 +143,72 @@ func (r *HandlerAdapter) accumulateErrors(results []valkey.ValkeyResult, key str
 	return nil
 }
 
+func retryWithBackoff(ctx context.Context, fn func() error, maxElapsed time.Duration) error {
+	backOff := backoff.NewExponentialBackOff()
+	backOff.InitialInterval = 100 * time.Millisecond
+	backOff.Multiplier = 2.0
+	backOff.MaxInterval = 2 * time.Second
+
+	ctx, cancel := context.WithTimeout(ctx, maxElapsed)
+	defer cancel()
+
+	operation := func() (bool, error) {
+		err := fn()
+		if err != nil {
+			select {
+			case <-ctx.Done():
+				return false, backoff.Permanent(ctx.Err())
+			default:
+			}
+			return false, err
+		}
+		return true, nil
+	}
+
+	_, err := backoff.Retry(ctx, operation, backoff.WithBackOff(backOff))
+	return err
+}
+
+//nolint:unparam
+func (r *HandlerAdapter) publishVarUpdate(
+	ctx context.Context,
+	hub string,
+	varName string,
+	varType string, // "set" | "map" | "string" | "int" | "boolean" | ...
+	action string, // "added" | "removed" | "set"
+	data any, // value or {"field":..., "value":...} or {"field":...} for remove
+	correlationID string,
+	source string, // e.g. "eventhub" or your worker name
+	recursionDepth int,
+) error {
+	pl := eventing.VariablesActionPayload{
+		VariableRef: varName,
+		DataType:    varType,
+		Operation:   action,
+		Data:        data,
+	}
+	plb, _ := json.Marshal(pl)
+
+	ev := eventing.MdaiEvent{
+		Name:           "var." + action,
+		Version:        1,
+		HubName:        hub,
+		Source:         source,
+		CorrelationID:  correlationID,
+		RecursionDepth: recursionDepth,
+		Payload:        string(plb),
+	}
+	ev.ApplyDefaults()
+
+	subj := eventing.NewMdaiEventSubject(eventing.TriggerEventType, fmt.Sprintf("%s.%s.%s", action, hub, varName))
+
+	if err := r.publisher.Publish(ctx, ev, subj); err == nil {
+		return nil
+	}
+
+	return nil
+}
+
 func makeAuditEntry(variableKey string, value string, correlationId string, operation string) StoreVariableAction {
 	auditAction := StoreVariableAction{
 		EventId:       time.Now().String(),
@@ -139,26 +229,28 @@ func (r *HandlerAdapter) makeVariableAuditLogActionCommand(action StoreVariableA
 }
 
 type StoreVariableAction struct {
-	HubName       string `json:"hub_name"`
-	EventId       string `json:"event_id"`
-	Operation     string `json:"operation"`
-	Target        string `json:"target"`
-	VariableRef   string `json:"variable_ref"`
-	Variable      string `json:"variable"`
-	CorrelationId string `json:"correlation_id"`
+	HubName        string `json:"hub_name"`
+	EventId        string `json:"event_id"`
+	Operation      string `json:"operation"`
+	Target         string `json:"target"`
+	VariableRef    string `json:"variable_ref"`
+	Variable       string `json:"variable"`
+	CorrelationId  string `json:"correlation_id"`
+	RecursionDepth int    `json:"recursion_depth"`
 }
 
 func (action StoreVariableAction) ToSequence() iter.Seq2[string, string] {
 	return func(yield func(K string, V string) bool) {
 		fields := map[string]string{
-			"timestamp":      time.Now().UTC().Format(time.RFC3339),
-			"hub_name":       action.HubName,
-			"event_id":       action.EventId,
-			"operation":      action.Operation,
-			"target":         action.Target,
-			"variable_ref":   action.VariableRef,
-			"variable":       action.Variable,
-			"correlation_id": action.CorrelationId,
+			"timestamp":       time.Now().UTC().Format(time.RFC3339),
+			"hub_name":        action.HubName,
+			"event_id":        action.EventId,
+			"operation":       action.Operation,
+			"target":          action.Target,
+			"variable_ref":    action.VariableRef,
+			"variable":        action.Variable,
+			"correlation_id":  action.CorrelationId,
+			"recursion_depth": strconv.Itoa(action.RecursionDepth),
 		}
 
 		for key, value := range fields {

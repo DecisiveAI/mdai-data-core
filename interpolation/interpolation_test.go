@@ -14,14 +14,15 @@ func TestEngine_Interpolate(t *testing.T) {
 
 	timestamp := time.Date(2023, 1, 1, 12, 0, 0, 0, time.UTC)
 	event := &eventing.MdaiEvent{
-		ID:            "test-id",
-		Name:          "test-event",
-		Timestamp:     timestamp,
-		Payload:       `{"user":{"name":"John","age":30},"level":"info","complex":{"nested":{"value":"deep"}}}`,
-		Source:        "test-source",
-		SourceID:      "source-123",
-		CorrelationID: "corr-456",
-		HubName:       "test-hub",
+		ID:             "test-id",
+		Name:           "test-event",
+		Timestamp:      timestamp,
+		Payload:        `{"user":{"name":"John","age":30},"level":"info","complex":{"nested":{"value":"deep"}}}`,
+		Source:         "test-source",
+		SourceID:       "source-123",
+		CorrelationID:  "corr-456",
+		HubName:        "test-hub",
+		RecursionDepth: 456,
 	}
 
 	tests := []struct {
@@ -76,6 +77,12 @@ func TestEngine_Interpolate(t *testing.T) {
 			name:     "correlation_id field",
 			input:    "Correlation_id: ${trigger:correlation_id}",
 			expected: "Correlation_id: corr-456",
+			event:    event,
+		},
+		{
+			name:     "recursion_depth field",
+			input:    "recursion_depth: ${trigger:recursion_depth}",
+			expected: "recursion_depth: 456",
 			event:    event,
 		},
 		{
