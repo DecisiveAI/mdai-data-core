@@ -73,7 +73,7 @@ type MdaiEvent struct {
 	SourceID       string    `json:"source_id"` // ex alert fingerprint
 	CorrelationID  string    `json:"correlation_id,omitempty"`
 	HubName        string    `json:"hub_name"`
-	RecursionDepth int       `json:"recursion_depth,omitempty"`
+	RecursionDepth int       `json:"recursion_depth,omitempty"` // recursion depth limit for events
 }
 
 func NewMdaiEvent(hubName string, varName string, varType string, action string, payload any) (*MdaiEvent, error) {

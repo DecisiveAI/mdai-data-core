@@ -73,7 +73,9 @@ func (r *HandlerAdapter) RemoveElementFromSet(ctx context.Context, variableKey s
 	if err := r.executeAuditedUpdateCommand(ctx, variableKey, variableUpdateCommand, auditLogCommand); err != nil {
 		return err
 	}
-	return r.publishVarUpdate(ctx, hubName, variableKey, "set", "remove", value, correlationId, "eventhub", recursionDepth)
+	return retryWithBackoff(ctx, func() error {
+		return r.publishVarUpdate(ctx, hubName, variableKey, "set", "remove", value, correlationId, "eventhub", recursionDepth)
+	}, 10*time.Second)
 }
 
 // SetMapEntry sets a field-value pair in a map data type and logs an audit entry.
@@ -89,7 +91,9 @@ func (r *HandlerAdapter) SetMapEntry(ctx context.Context, variableKey string, hu
 	if err := r.executeAuditedUpdateCommand(ctx, variableKey, variableUpdateCommand, auditLogCommand); err != nil {
 		return err
 	}
-	return r.publishVarUpdate(ctx, hubName, variableKey, "map", "set", value, correlationId, "eventhub", recursionDepth)
+	return retryWithBackoff(ctx, func() error {
+		return r.publishVarUpdate(ctx, hubName, variableKey, "map", "set", value, correlationId, "eventhub", recursionDepth)
+	}, 10*time.Second)
 }
 
 // RemoveMapEntry removes a field from a map data type and logs an audit entry.
@@ -103,7 +107,9 @@ func (r *HandlerAdapter) RemoveMapEntry(ctx context.Context, variableKey string,
 	if err := r.executeAuditedUpdateCommand(ctx, variableKey, variableUpdateCommand, auditLogCommand); err != nil {
 		return err
 	}
-	return r.publishVarUpdate(ctx, hubName, variableKey, "map", "remove", field, correlationId, "eventhub", recursionDepth)
+	return retryWithBackoff(ctx, func() error {
+		return r.publishVarUpdate(ctx, hubName, variableKey, "map", "remove", field, correlationId, "eventhub", recursionDepth)
+	}, 10*time.Second)
 }
 
 // SetStringValue sets a string value and logs an audit entry.
@@ -116,7 +122,9 @@ func (r *HandlerAdapter) SetStringValue(ctx context.Context, variableKey string,
 	if err := r.executeAuditedUpdateCommand(ctx, variableKey, variableUpdateCommand, auditLogCommand); err != nil {
 		return err
 	}
-	return r.publishVarUpdate(ctx, hubName, variableKey, "string", "set", value, correlationId, "eventhub", recursionDepth)
+	return retryWithBackoff(ctx, func() error {
+		return r.publishVarUpdate(ctx, hubName, variableKey, "string", "set", value, correlationId, "eventhub", recursionDepth)
+	}, 10*time.Second)
 }
 
 func (r *HandlerAdapter) executeAuditedUpdateCommand(ctx context.Context, variableKey string, variableUpdateCommand valkey.Completed, auditLogCommand valkey.Completed) error {
@@ -203,7 +211,7 @@ func (r *HandlerAdapter) publishVarUpdate(
 	subj := eventing.NewMdaiEventSubject(eventing.TriggerEventType, fmt.Sprintf("%s.%s.%s", action, hub, varName))
 
 	if err := r.publisher.Publish(ctx, ev, subj); err == nil {
-		return nil
+		return err
 	}
 
 	return nil
