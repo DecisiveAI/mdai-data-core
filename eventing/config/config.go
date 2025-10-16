@@ -150,6 +150,8 @@ type Config struct {
 	InactiveThreshold time.Duration `default:"1m"                                               envconfig:"NATS_INACTIVE_THRESHOLD"`
 	NatsPassword      string        `envconfig:"NATS_PASSWORD"`
 	Logger            *zap.Logger   `envconfig:"-"`
+	// this flag should not be used in prod environment, only for local testing and development
+	DevDeleteMembers bool `default:"false"                                            envconfig:"DEV_DELETE_MEMBERS"`
 }
 
 func LoadConfig() (Config, error) {
@@ -393,14 +395,15 @@ func setKeys(m map[string]struct{}) []string {
 
 func ensureElasticGroup(ctx context.Context, js jetstream.JetStream, streamName, groupName, pattern string, hashWildcards []int, cfg Config) error {
 	ec, _ := pcgroups.GetElasticConsumerGroupConfig(ctx, js, streamName, groupName)
-	/* reset mapping, very rarely members got stuck if service is killed, this is workaround for local testing
-	if ec != nil && len(ec.Members) > 1 {
-		_, err := pcgroups.DeleteMembers(ctx, js, streamName, groupName, ec.Members)
-		if err != nil {
-			return err
+	if cfg.DevDeleteMembers {
+		// reset mapping, very rarely members got stuck if service is killed, this is workaround for local testing
+		if ec != nil && len(ec.Members) > 1 {
+			_, err := pcgroups.DeleteMembers(ctx, js, streamName, groupName, ec.Members)
+			if err != nil {
+				return err
+			}
 		}
 	}
-	*/
 
 	if ec == nil {
 		cfg.Logger.Info("NATS Elastic Consumer Group does not exist, creating", zap.String("group_name", groupName), zap.String("pattern", pattern))

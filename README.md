@@ -35,11 +35,7 @@ func main() {
 }
 ```
 ## To Generate Mocks
-install
+run
 ```shell
-go install go.uber.org/mock/mockgen@latest 
-```
-Generate by running
-```shell
-go generate ./...
+make generate
 ```
