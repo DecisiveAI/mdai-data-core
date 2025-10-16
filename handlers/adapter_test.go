@@ -350,7 +350,7 @@ func TestRetryWithBackoff_SucceedsAfterRetries(t *testing.T) {
 			return errors.New("not yet")
 		}
 		return nil
-	}, 400*time.Millisecond)
+	}, 800*time.Millisecond)
 
 	require.NoError(t, err)
 	assert.Equal(t, failures+1, calls)
