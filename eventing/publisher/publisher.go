@@ -13,6 +13,7 @@ import (
 	"go.uber.org/zap"
 )
 
+//go:generate mockgen -source=publisher.go -destination=../../internal/mocks/eventing/publisher/publisher.go -package=publisher
 type Publisher interface {
 	Publish(ctx context.Context, event eventing.MdaiEvent, subject eventing.MdaiEventSubject) error
 	Close() error

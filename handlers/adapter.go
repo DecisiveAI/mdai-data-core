@@ -33,6 +33,7 @@ type HandlerAdapter struct {
 	logger        *zap.Logger
 	valkeyAdapter *variables.ValkeyAdapter
 	publisher     publisher.Publisher
+	retryMaxTime  time.Duration
 }
 
 // NewHandlerAdapter creates a new wrapper for handling variable operations.
@@ -43,6 +44,7 @@ func NewHandlerAdapter(client valkey.Client, logger *zap.Logger, pub publisher.P
 		logger:        logger,
 		valkeyAdapter: va,
 		publisher:     pub,
+		retryMaxTime:  10 * time.Second,
 	}
 
 	return ha
@@ -60,7 +62,7 @@ func (r *HandlerAdapter) AddElementToSet(ctx context.Context, variableKey string
 	}
 	return retryWithBackoff(ctx, func() error {
 		return r.publishVarUpdate(ctx, hubName, variableKey, "set", "added", value, correlationId, "eventhub", recursionDepth)
-	}, 10*time.Second)
+	}, r.retryMaxTime)
 }
 
 // RemoveElementFromSet removes an element from a Set data type and logs an audit entry.
@@ -75,7 +77,7 @@ func (r *HandlerAdapter) RemoveElementFromSet(ctx context.Context, variableKey s
 	}
 	return retryWithBackoff(ctx, func() error {
 		return r.publishVarUpdate(ctx, hubName, variableKey, "set", "remove", value, correlationId, "eventhub", recursionDepth)
-	}, 10*time.Second)
+	}, r.retryMaxTime)
 }
 
 // SetMapEntry sets a field-value pair in a map data type and logs an audit entry.
@@ -93,7 +95,7 @@ func (r *HandlerAdapter) SetMapEntry(ctx context.Context, variableKey string, hu
 	}
 	return retryWithBackoff(ctx, func() error {
 		return r.publishVarUpdate(ctx, hubName, variableKey, "map", "set", value, correlationId, "eventhub", recursionDepth)
-	}, 10*time.Second)
+	}, r.retryMaxTime)
 }
 
 // RemoveMapEntry removes a field from a map data type and logs an audit entry.
@@ -109,7 +111,7 @@ func (r *HandlerAdapter) RemoveMapEntry(ctx context.Context, variableKey string,
 	}
 	return retryWithBackoff(ctx, func() error {
 		return r.publishVarUpdate(ctx, hubName, variableKey, "map", "remove", field, correlationId, "eventhub", recursionDepth)
-	}, 10*time.Second)
+	}, r.retryMaxTime)
 }
 
 // SetStringValue sets a string value and logs an audit entry.
@@ -124,7 +126,7 @@ func (r *HandlerAdapter) SetStringValue(ctx context.Context, variableKey string,
 	}
 	return retryWithBackoff(ctx, func() error {
 		return r.publishVarUpdate(ctx, hubName, variableKey, "string", "set", value, correlationId, "eventhub", recursionDepth)
-	}, 10*time.Second)
+	}, r.retryMaxTime)
 }
 
 func (r *HandlerAdapter) executeAuditedUpdateCommand(ctx context.Context, variableKey string, variableUpdateCommand valkey.Completed, auditLogCommand valkey.Completed) error {
@@ -152,6 +154,10 @@ func (r *HandlerAdapter) accumulateErrors(results []valkey.ValkeyResult, key str
 }
 
 func retryWithBackoff(ctx context.Context, fn func() error, maxElapsed time.Duration) error {
+	if maxElapsed <= 0 {
+		return fn()
+	}
+
 	backOff := backoff.NewExponentialBackOff()
 	backOff.InitialInterval = 100 * time.Millisecond
 	backOff.Multiplier = 2.0
@@ -210,7 +216,7 @@ func (r *HandlerAdapter) publishVarUpdate(
 
 	subj := eventing.NewMdaiEventSubject(eventing.TriggerEventType, fmt.Sprintf("%s.%s.%s", action, hub, varName))
 
-	if err := r.publisher.Publish(ctx, ev, subj); err == nil {
+	if err := r.publisher.Publish(ctx, ev, subj); err != nil {
 		return err
 	}
 
