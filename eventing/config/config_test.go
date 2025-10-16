@@ -556,12 +556,16 @@ func runJetStream(t *testing.T) *server.Server {
 	url := ns.ClientURL()
 	t.Setenv("NATS_URL", url)
 
+	t.Cleanup(func() {
+		ns.Shutdown()
+		ns.WaitForShutdown()
+	})
+
 	return ns
 }
 
 func TestEnsureStream_CreatesNewStream(t *testing.T) {
 	srv := runJetStream(t)
-	defer srv.Shutdown()
 
 	nc, err := nats.Connect(srv.ClientURL())
 	require.NoError(t, err)
@@ -610,7 +614,6 @@ func TestEnsureStream_CreatesNewStream(t *testing.T) {
 
 func TestEnsureStream_UpdateExistingStream(t *testing.T) {
 	srv := runJetStream(t)
-	defer srv.Shutdown()
 
 	nc, err := nats.Connect(srv.ClientURL())
 	require.NoError(t, err)
@@ -657,7 +660,6 @@ func TestEnsureStream_UpdateExistingStream(t *testing.T) {
 
 func TestEnsureStream_RefusesToDropSubjects(t *testing.T) {
 	srv := runJetStream(t)
-	defer srv.Shutdown()
 
 	nc, err := nats.Connect(srv.ClientURL())
 	require.NoError(t, err)
@@ -702,7 +704,6 @@ func TestEnsureStream_RefusesToDropSubjects(t *testing.T) {
 
 func TestEnsureStream_NoUpdateWhenSubjectsMatch(t *testing.T) {
 	srv := runJetStream(t)
-	defer srv.Shutdown()
 
 	nc, err := nats.Connect(srv.ClientURL())
 	require.NoError(t, err)
@@ -752,7 +753,6 @@ func TestEnsureStream_NoUpdateWhenSubjectsMatch(t *testing.T) {
 
 func TestEnsureElasticGroup_CreatesNewGroup(t *testing.T) {
 	srv := runJetStream(t)
-	defer srv.Shutdown()
 
 	nc, err := nats.Connect(srv.ClientURL())
 	require.NoError(t, err)
