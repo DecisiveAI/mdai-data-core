@@ -70,7 +70,16 @@ func (r *HandlerAdapter) AddElementToSet(ctx context.Context, variableKey string
 		return err
 	}
 	return retryWithBackoff(ctx, func() error {
-		return r.publishVarUpdate(ctx, hubName, variableKey, dataTypeSet, actionAdded, value, correlationId, source, recursionDepth)
+		return r.publishVarUpdate(ctx, PublishVarUpdateParams{
+			Hub:            hubName,
+			VarName:        variableKey,
+			VarType:        dataTypeSet,
+			Action:         actionAdded,
+			Data:           value,
+			CorrelationID:  correlationId,
+			Source:         source,
+			RecursionDepth: recursionDepth,
+		})
 	}, r.retryMaxTime)
 }
 
@@ -85,7 +94,16 @@ func (r *HandlerAdapter) RemoveElementFromSet(ctx context.Context, variableKey s
 		return err
 	}
 	return retryWithBackoff(ctx, func() error {
-		return r.publishVarUpdate(ctx, hubName, variableKey, dataTypeSet, actionRemove, value, correlationId, source, recursionDepth)
+		return r.publishVarUpdate(ctx, PublishVarUpdateParams{
+			Hub:            hubName,
+			VarName:        variableKey,
+			VarType:        dataTypeSet,
+			Action:         actionRemove,
+			Data:           value,
+			CorrelationID:  correlationId,
+			Source:         source,
+			RecursionDepth: recursionDepth,
+		})
 	}, r.retryMaxTime)
 }
 
@@ -103,7 +121,16 @@ func (r *HandlerAdapter) SetMapEntry(ctx context.Context, variableKey string, hu
 		return err
 	}
 	return retryWithBackoff(ctx, func() error {
-		return r.publishVarUpdate(ctx, hubName, variableKey, dataTypeMap, actionSet, value, correlationId, source, recursionDepth)
+		return r.publishVarUpdate(ctx, PublishVarUpdateParams{
+			Hub:            hubName,
+			VarName:        variableKey,
+			VarType:        dataTypeMap,
+			Action:         actionSet,
+			Data:           value,
+			CorrelationID:  correlationId,
+			Source:         source,
+			RecursionDepth: recursionDepth,
+		})
 	}, r.retryMaxTime)
 }
 
@@ -119,7 +146,16 @@ func (r *HandlerAdapter) RemoveMapEntry(ctx context.Context, variableKey string,
 		return err
 	}
 	return retryWithBackoff(ctx, func() error {
-		return r.publishVarUpdate(ctx, hubName, variableKey, dataTypeMap, actionRemove, field, correlationId, source, recursionDepth)
+		return r.publishVarUpdate(ctx, PublishVarUpdateParams{
+			Hub:            hubName,
+			VarName:        variableKey,
+			VarType:        dataTypeMap,
+			Action:         actionRemove,
+			Data:           field,
+			CorrelationID:  correlationId,
+			Source:         source,
+			RecursionDepth: recursionDepth,
+		})
 	}, r.retryMaxTime)
 }
 
@@ -134,7 +170,16 @@ func (r *HandlerAdapter) SetStringValue(ctx context.Context, variableKey string,
 		return err
 	}
 	return retryWithBackoff(ctx, func() error {
-		return r.publishVarUpdate(ctx, hubName, variableKey, dataTypeString, actionSet, value, correlationId, source, recursionDepth)
+		return r.publishVarUpdate(ctx, PublishVarUpdateParams{
+			Hub:            hubName,
+			VarName:        variableKey,
+			VarType:        dataTypeString,
+			Action:         actionSet,
+			Data:           value,
+			CorrelationID:  correlationId,
+			Source:         source,
+			RecursionDepth: recursionDepth,
+		})
 	}, r.retryMaxTime)
 }
 
@@ -191,38 +236,39 @@ func retryWithBackoff(ctx context.Context, fn func() error, maxElapsed time.Dura
 	return err
 }
 
+type PublishVarUpdateParams struct {
+	Hub            string
+	VarName        string
+	VarType        string // "set" | "map" | "string" | "int" | "boolean" | ...
+	Action         string // "added" | "removed" | "set"
+	Data           any    // value or {"field":..., "value":...} or {"field":...} for remove
+	CorrelationID  string
+	Source         string // e.g. "eventhub" or your worker name
+	RecursionDepth int
+}
+
 //nolint:unparam
-func (r *HandlerAdapter) publishVarUpdate(
-	ctx context.Context,
-	hub string,
-	varName string,
-	varType string, // "set" | "map" | "string" | "int" | "boolean" | ...
-	action string, // "added" | "removed" | "set"
-	data any, // value or {"field":..., "value":...} or {"field":...} for remove
-	correlationID string,
-	source string, // e.g. "eventhub" or your worker name
-	recursionDepth int,
-) error {
+func (r *HandlerAdapter) publishVarUpdate(ctx context.Context, params PublishVarUpdateParams) error {
 	pl := eventing.VariablesActionPayload{
-		VariableRef: varName,
-		DataType:    varType,
-		Operation:   action,
-		Data:        data,
+		VariableRef: params.VarName,
+		DataType:    params.VarType,
+		Operation:   params.Action,
+		Data:        params.Data,
 	}
 	plb, _ := json.Marshal(pl)
 
 	ev := eventing.MdaiEvent{
-		Name:           "var." + action,
+		Name:           "var." + params.Action,
 		Version:        1,
-		HubName:        hub,
-		Source:         source,
-		CorrelationID:  correlationID,
-		RecursionDepth: recursionDepth,
+		HubName:        params.Hub,
+		Source:         params.Source,
+		CorrelationID:  params.CorrelationID,
+		RecursionDepth: params.RecursionDepth,
 		Payload:        string(plb),
 	}
 	ev.ApplyDefaults()
 
-	subj := eventing.NewMdaiEventSubject(eventing.TriggerEventType, fmt.Sprintf("%s.%s.%s", action, hub, varName))
+	subj := eventing.NewMdaiEventSubject(eventing.TriggerEventType, fmt.Sprintf("%s.%s.%s", params.Action, params.Hub, params.VarName))
 
 	return r.publisher.Publish(ctx, ev, subj)
 }

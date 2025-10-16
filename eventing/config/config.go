@@ -10,13 +10,15 @@ import (
 	"time"
 
 	"github.com/cenkalti/backoff/v5"
-	"github.com/decisiveai/mdai-data-core/eventing"
+	mapset "github.com/deckarep/golang-set/v2"
 	"github.com/kelseyhightower/envconfig"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/nats-io/nuid"
 	"github.com/synadia-io/orbit.go/pcgroups"
 	"go.uber.org/zap"
+
+	"github.com/decisiveai/mdai-data-core/eventing"
 )
 
 const (
@@ -305,7 +307,7 @@ func EnsureStream(ctx context.Context, js jetstream.JetStream, cfg Config) error
 	if err != nil {
 		return err
 	}
-	desiredSet := toSet(desired)
+	desiredSet := mapset.NewSet[string](desired...)
 
 	stream, err := js.Stream(ctx, cfg.StreamName)
 	if errors.Is(err, jetstream.ErrStreamNotFound) {
@@ -339,13 +341,9 @@ func EnsureStream(ctx context.Context, js jetstream.JetStream, cfg Config) error
 	}
 
 	// Refuse if desired is not a superset of existing.
-	var missingFromDesired []string
-	for _, cur := range info.Config.Subjects {
-		if _, ok := desiredSet[cur]; !ok {
-			missingFromDesired = append(missingFromDesired, cur)
-		}
-	}
-	if len(missingFromDesired) > 0 {
+	curSet := mapset.NewSet[string](info.Config.Subjects...)
+	if !desiredSet.IsSuperset(curSet) {
+		missingFromDesired := curSet.Difference(desiredSet).ToSlice()
 		cfg.Logger.Error("Refusing stream update: desired subjects would drop existing subjects",
 			zap.String("stream_name", cfg.StreamName),
 			zap.Strings("existing_not_in_desired", missingFromDesired))
@@ -353,20 +351,15 @@ func EnsureStream(ctx context.Context, js jetstream.JetStream, cfg Config) error
 	}
 
 	// Add only truly new subjects.
-	curSet := toSet(info.Config.Subjects)
-	var toAdd []string
-	for _, s := range desired {
-		if _, ok := curSet[s]; !ok {
-			toAdd = append(toAdd, s)
-			curSet[s] = struct{}{}
-		}
-	}
-	if len(toAdd) == 0 {
+	toAddSet := desiredSet.Difference(curSet)
+	if toAddSet.Cardinality() == 0 {
 		return nil
 	}
 
-	info.Config.Subjects = setKeys(curSet) // keeps all existing + new
-	sort.Strings(info.Config.Subjects)
+	toAdd := toAddSet.ToSlice()
+	allSubjects := desiredSet.ToSlice()
+	sort.Strings(allSubjects)
+	info.Config.Subjects = allSubjects // keeps all existing + new
 
 	cfg.Logger.Info("Updating JetStream stream subjects",
 		zap.String("stream_name", cfg.StreamName),
@@ -375,22 +368,6 @@ func EnsureStream(ctx context.Context, js jetstream.JetStream, cfg Config) error
 
 	_, err = js.UpdateStream(ctx, info.Config)
 	return err
-}
-
-func toSet(in []string) map[string]struct{} {
-	m := make(map[string]struct{}, len(in))
-	for _, s := range in {
-		m[s] = struct{}{}
-	}
-	return m
-}
-
-func setKeys(m map[string]struct{}) []string {
-	out := make([]string, 0, len(m))
-	for k := range m {
-		out = append(out, k)
-	}
-	return out
 }
 
 func ensureElasticGroup(ctx context.Context, js jetstream.JetStream, streamName, groupName, pattern string, hashWildcards []int, cfg Config) error {

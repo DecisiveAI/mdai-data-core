@@ -413,7 +413,16 @@ func TestPublishVarUpdate_BuildsEventAndSubject(t *testing.T) {
 			return nil
 		})
 
-	err := adapter.publishVarUpdate(ctx, hub, varName, varType, action, data, corr, "eventhub", recDepth)
+	err := adapter.publishVarUpdate(ctx, PublishVarUpdateParams{
+		Hub:            hub,
+		VarName:        varName,
+		VarType:        varType,
+		Action:         action,
+		Data:           data,
+		CorrelationID:  corr,
+		Source:         "eventhub",
+		RecursionDepth: recDepth,
+	})
 	require.NoError(t, err)
 }
 
