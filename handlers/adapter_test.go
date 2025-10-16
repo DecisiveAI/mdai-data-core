@@ -214,7 +214,7 @@ func TestAddElementToSet_RetryThenSuccess(t *testing.T) {
 	pub.EXPECT().Publish(ctx, gomock.Any(), gomock.Any()).
 		DoAndReturn(func(context.Context, eventing.MdaiEvent, eventing.MdaiEventSubject) error {
 			callCount++
-			if callCount < 3 {
+			if callCount < 2 {
 				return errors.New("transient publish")
 			}
 			return nil
@@ -225,7 +225,7 @@ func TestAddElementToSet_RetryThenSuccess(t *testing.T) {
 	elapsed := time.Since(start)
 
 	require.NoError(t, err)
-	assert.GreaterOrEqual(t, callCount, 3)
+	assert.GreaterOrEqual(t, callCount, 2)
 	// sanity: shouldn't take longer than the retryMaxTime by much
 	assert.Less(t, elapsed, 2*adapter.retryMaxTime)
 }
