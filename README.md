@@ -34,3 +34,12 @@ func main() {
 	// proceed with error hadling and the rest of your logic
 }
 ```
+## To Generate Mocks
+install
+```shell
+go install go.uber.org/mock/mockgen@latest 
+```
+Generate by running
+```shell
+go generate ./...
+```
