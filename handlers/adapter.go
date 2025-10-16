@@ -11,13 +11,22 @@ import (
 	"time"
 
 	"github.com/cenkalti/backoff/v5"
+	"github.com/decisiveai/mdai-data-core/audit"
 	"github.com/decisiveai/mdai-data-core/eventing"
 	"github.com/decisiveai/mdai-data-core/eventing/publisher"
-	"go.uber.org/zap"
-
-	"github.com/decisiveai/mdai-data-core/audit"
 	variables "github.com/decisiveai/mdai-data-core/variables"
 	"github.com/valkey-io/valkey-go"
+	"go.uber.org/zap"
+)
+
+const (
+	source         = "eventhub"
+	actionAdded    = "added"
+	actionSet      = "set"
+	actionRemove   = "remove"
+	dataTypeString = "string"
+	dataTypeMap    = "map"
+	dataTypeSet    = "set"
 )
 
 // HandlerAdapter is a wrapper for handling variable operations.
@@ -61,7 +70,7 @@ func (r *HandlerAdapter) AddElementToSet(ctx context.Context, variableKey string
 		return err
 	}
 	return retryWithBackoff(ctx, func() error {
-		return r.publishVarUpdate(ctx, hubName, variableKey, "set", "added", value, correlationId, "eventhub", recursionDepth)
+		return r.publishVarUpdate(ctx, hubName, variableKey, dataTypeSet, actionAdded, value, correlationId, source, recursionDepth)
 	}, r.retryMaxTime)
 }
 
@@ -76,7 +85,7 @@ func (r *HandlerAdapter) RemoveElementFromSet(ctx context.Context, variableKey s
 		return err
 	}
 	return retryWithBackoff(ctx, func() error {
-		return r.publishVarUpdate(ctx, hubName, variableKey, "set", "remove", value, correlationId, "eventhub", recursionDepth)
+		return r.publishVarUpdate(ctx, hubName, variableKey, dataTypeSet, actionRemove, value, correlationId, source, recursionDepth)
 	}, r.retryMaxTime)
 }
 
@@ -94,7 +103,7 @@ func (r *HandlerAdapter) SetMapEntry(ctx context.Context, variableKey string, hu
 		return err
 	}
 	return retryWithBackoff(ctx, func() error {
-		return r.publishVarUpdate(ctx, hubName, variableKey, "map", "set", value, correlationId, "eventhub", recursionDepth)
+		return r.publishVarUpdate(ctx, hubName, variableKey, dataTypeMap, actionSet, value, correlationId, source, recursionDepth)
 	}, r.retryMaxTime)
 }
 
@@ -110,7 +119,7 @@ func (r *HandlerAdapter) RemoveMapEntry(ctx context.Context, variableKey string,
 		return err
 	}
 	return retryWithBackoff(ctx, func() error {
-		return r.publishVarUpdate(ctx, hubName, variableKey, "map", "remove", field, correlationId, "eventhub", recursionDepth)
+		return r.publishVarUpdate(ctx, hubName, variableKey, dataTypeMap, actionRemove, field, correlationId, source, recursionDepth)
 	}, r.retryMaxTime)
 }
 
@@ -125,7 +134,7 @@ func (r *HandlerAdapter) SetStringValue(ctx context.Context, variableKey string,
 		return err
 	}
 	return retryWithBackoff(ctx, func() error {
-		return r.publishVarUpdate(ctx, hubName, variableKey, "string", "set", value, correlationId, "eventhub", recursionDepth)
+		return r.publishVarUpdate(ctx, hubName, variableKey, dataTypeString, actionSet, value, correlationId, source, recursionDepth)
 	}, r.retryMaxTime)
 }
 
@@ -167,8 +176,7 @@ func retryWithBackoff(ctx context.Context, fn func() error, maxElapsed time.Dura
 	defer cancel()
 
 	operation := func() (bool, error) {
-		err := fn()
-		if err != nil {
+		if err := fn(); err != nil {
 			select {
 			case <-ctx.Done():
 				return false, backoff.Permanent(ctx.Err())
@@ -216,11 +224,7 @@ func (r *HandlerAdapter) publishVarUpdate(
 
 	subj := eventing.NewMdaiEventSubject(eventing.TriggerEventType, fmt.Sprintf("%s.%s.%s", action, hub, varName))
 
-	if err := r.publisher.Publish(ctx, ev, subj); err != nil {
-		return err
-	}
-
-	return nil
+	return r.publisher.Publish(ctx, ev, subj)
 }
 
 func makeAuditEntry(variableKey string, value string, correlationId string, operation string) StoreVariableAction {
