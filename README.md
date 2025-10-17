@@ -34,3 +34,8 @@ func main() {
 	// proceed with error hadling and the rest of your logic
 }
 ```
+## To Generate Mocks
+run
+```shell
+make generate
+```

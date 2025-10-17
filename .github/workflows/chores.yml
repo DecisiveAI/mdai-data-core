@@ -112,6 +112,8 @@ jobs:
 
       - name: Running Tests
         run: |
+          go install go.uber.org/mock/mockgen@v0.5.2
+          go generate ./...
           go mod vendor
           go mod tidy
           CGO_ENABLED=0 go test -coverprofile=coverage.txt -mod=vendor -v -count=1 ./...

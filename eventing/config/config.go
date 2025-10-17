@@ -5,17 +5,20 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"sort"
 	"strings"
 	"time"
 
 	"github.com/cenkalti/backoff/v5"
-	"github.com/decisiveai/mdai-data-core/eventing"
+	mapset "github.com/deckarep/golang-set/v2"
 	"github.com/kelseyhightower/envconfig"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/nats-io/nuid"
 	"github.com/synadia-io/orbit.go/pcgroups"
 	"go.uber.org/zap"
+
+	"github.com/decisiveai/mdai-data-core/eventing"
 )
 
 const (
@@ -111,12 +114,22 @@ var (
 		ConsumerGroup: eventing.ReplayConsumerGroupName,
 		WildcardCount: 2,
 	}
+	triggerSubjectConfig = mdaiSubjectConfig{
+		Topic:         eventing.TriggerEventType,
+		ConsumerGroup: eventing.TriggerConsumerGroupName,
+		WildcardCount: 3, // action, hub and key
+	}
 )
 
 type allSubjectConfigs []mdaiSubjectConfig
 
 var (
-	everySubjectConfig allSubjectConfigs = []mdaiSubjectConfig{alertSubjectConfig, varSubjectConfig, replaySubjectConfig}
+	everySubjectConfig allSubjectConfigs = []mdaiSubjectConfig{
+		alertSubjectConfig,
+		varSubjectConfig,
+		replaySubjectConfig,
+		triggerSubjectConfig,
+	}
 )
 
 func (subjectConfigs allSubjectConfigs) getAllSubjectStringsWithAdditionalSuffixes(prefix string, additionalNonWildcardSuffixes ...string) ([]string, error) {
@@ -133,13 +146,14 @@ func (subjectConfigs allSubjectConfigs) getAllSubjectStringsWithAdditionalSuffix
 
 type Config struct {
 	URL               string        `default:"nats://mdai-hub-nats.mdai.svc.cluster.local:4222" envconfig:"NATS_URL"`
-	Subject           string        `default:"eventing"                                           envconfig:"NATS_SUBJECT"`
+	Subject           string        `default:"eventing"                                         envconfig:"NATS_SUBJECT"`
 	StreamName        string        `default:"EVENTS_STREAM"                                    envconfig:"NATS_STREAM_NAME"`
-	QueueName         string        `default:"eventing"                                           envconfig:"NATS_QUEUE_NAME"`
 	ClientName        string        `envconfig:"-"`
 	InactiveThreshold time.Duration `default:"1m"                                               envconfig:"NATS_INACTIVE_THRESHOLD"`
 	NatsPassword      string        `envconfig:"NATS_PASSWORD"`
 	Logger            *zap.Logger   `envconfig:"-"`
+	// this flag should not be used in prod environment, only for local testing and development
+	DevDeleteMembers bool `default:"false"                                            envconfig:"DEV_DELETE_MEMBERS"`
 }
 
 func LoadConfig() (Config, error) {
@@ -286,19 +300,25 @@ func EnsurePCGroup(ctx context.Context, js jetstream.JetStream, cfg Config) erro
 	return nil
 }
 
+// EnsureStream ensures that the specified stream exists with the given subjects.
+// It will update the stream if necessary only when new subject was added.
 func EnsureStream(ctx context.Context, js jetstream.JetStream, cfg Config) error {
-	_, err := js.Stream(ctx, cfg.StreamName)
+	desired, err := everySubjectConfig.getAllSubjectStringsWithAdditionalSuffixes(cfg.Subject, dlqSuffix)
+	if err != nil {
+		return err
+	}
+	desiredSet := mapset.NewSet[string](desired...)
+
+	stream, err := js.Stream(ctx, cfg.StreamName)
 	if errors.Is(err, jetstream.ErrStreamNotFound) {
-		cfg.Logger.Info("Creating new NATS JetStream stream", zap.String("stream_name", cfg.StreamName))
-		jetStreamSubjects, subjectErr := everySubjectConfig.getAllSubjectStringsWithAdditionalSuffixes(cfg.Subject, dlqSuffix)
-		if subjectErr != nil {
-			return subjectErr
-		}
+		cfg.Logger.Info("Creating new NATS JetStream stream",
+			zap.String("stream_name", cfg.StreamName),
+			zap.Strings("subjects", desired))
 		_, err = js.CreateStream(ctx,
 			jetstream.StreamConfig{
 				Name: cfg.StreamName,
 				// TODO create a separate stream for DLQ since it could have different retention settings
-				Subjects:   jetStreamSubjects,
+				Subjects:   desired,
 				Storage:    jetstream.FileStorage,
 				Retention:  jetstream.WorkQueuePolicy, // assume no replay needed
 				MaxMsgs:    -1,
@@ -306,16 +326,62 @@ func EnsureStream(ctx context.Context, js jetstream.JetStream, cfg Config) error
 				Discard:    jetstream.DiscardOld,
 				Duplicates: defaultDuplicates,
 			})
+		if err != nil && !errors.Is(err, jetstream.ErrStreamNameAlreadyInUse) {
+			return err
+		}
+		return nil
 	}
-	if err != nil && !errors.Is(err, jetstream.ErrStreamNameAlreadyInUse) {
+	if err != nil {
 		return err // otherwise someone else just created it
 	}
 
-	return nil
+	info, err := stream.Info(ctx)
+	if err != nil {
+		return err
+	}
+
+	// Refuse if desired is not a superset of existing.
+	curSet := mapset.NewSet[string](info.Config.Subjects...)
+	if !desiredSet.IsSuperset(curSet) {
+		missingFromDesired := curSet.Difference(desiredSet).ToSlice()
+		cfg.Logger.Error("Refusing stream update: desired subjects would drop existing subjects",
+			zap.String("stream_name", cfg.StreamName),
+			zap.Strings("existing_not_in_desired", missingFromDesired))
+		return fmt.Errorf("desired subjects missing existing subject(s): %s", strings.Join(missingFromDesired, ", "))
+	}
+
+	// Add only truly new subjects.
+	toAddSet := desiredSet.Difference(curSet)
+	if toAddSet.Cardinality() == 0 {
+		return nil
+	}
+
+	toAdd := toAddSet.ToSlice()
+	allSubjects := desiredSet.ToSlice()
+	sort.Strings(allSubjects)
+	info.Config.Subjects = allSubjects // keeps all existing + new
+
+	cfg.Logger.Info("Updating JetStream stream subjects",
+		zap.String("stream_name", cfg.StreamName),
+		zap.Strings("adding", toAdd),
+		zap.Int("total_subjects", len(info.Config.Subjects)))
+
+	_, err = js.UpdateStream(ctx, info.Config)
+	return err
 }
 
 func ensureElasticGroup(ctx context.Context, js jetstream.JetStream, streamName, groupName, pattern string, hashWildcards []int, cfg Config) error {
 	ec, _ := pcgroups.GetElasticConsumerGroupConfig(ctx, js, streamName, groupName)
+	if cfg.DevDeleteMembers {
+		// reset mapping, very rarely members got stuck if service is killed, this is workaround for local testing
+		if ec != nil && len(ec.Members) > 1 {
+			_, err := pcgroups.DeleteMembers(ctx, js, streamName, groupName, ec.Members)
+			if err != nil {
+				return err
+			}
+		}
+	}
+
 	if ec == nil {
 		cfg.Logger.Info("NATS Elastic Consumer Group does not exist, creating", zap.String("group_name", groupName), zap.String("pattern", pattern))
 		_, err := pcgroups.CreateElastic(

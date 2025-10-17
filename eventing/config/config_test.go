@@ -4,12 +4,16 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"sort"
 	"testing"
 	"time"
 
 	"github.com/nats-io/nats-server/v2/server"
+	"github.com/nats-io/nats.go"
+	"github.com/nats-io/nats.go/jetstream"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/synadia-io/orbit.go/pcgroups"
 	"go.uber.org/zap"
 )
 
@@ -94,7 +98,6 @@ func TestLoadConfig(t *testing.T) {
 				URL:               "nats://mdai-hub-nats.mdai.svc.cluster.local:4222",
 				Subject:           "eventing",
 				StreamName:        "EVENTS_STREAM",
-				QueueName:         "eventing",
 				InactiveThreshold: 1 * time.Minute,
 				NatsPassword:      "",
 			},
@@ -115,7 +118,6 @@ func TestLoadConfig(t *testing.T) {
 				URL:               "nats://custom-server:4222",
 				Subject:           "custom-eventing",
 				StreamName:        "CUSTOM_STREAM",
-				QueueName:         "custom-queue",
 				InactiveThreshold: 5 * time.Minute,
 				NatsPassword:      "secret123",
 			},
@@ -132,7 +134,6 @@ func TestLoadConfig(t *testing.T) {
 				URL:               "nats://partial-server:4222",
 				Subject:           "eventing",      // default
 				StreamName:        "EVENTS_STREAM", // default
-				QueueName:         "eventing",      // default
 				InactiveThreshold: 1 * time.Minute, // default
 				NatsPassword:      "partial-secret",
 			},
@@ -148,7 +149,6 @@ func TestLoadConfig(t *testing.T) {
 				URL:               "nats://mdai-hub-nats.mdai.svc.cluster.local:4222", // default
 				Subject:           "eventing",                                         // default
 				StreamName:        "EVENTS_STREAM",                                    // default
-				QueueName:         "eventing",                                         // default
 				InactiveThreshold: 30 * time.Second,
 				NatsPassword:      "", // default
 			},
@@ -174,7 +174,6 @@ func TestLoadConfig(t *testing.T) {
 				URL:               "",              // empty from env
 				Subject:           "eventing",      // default
 				StreamName:        "EVENTS_STREAM", // default
-				QueueName:         "eventing",      // default
 				InactiveThreshold: 1 * time.Minute, // default
 				NatsPassword:      "",              // empty from env
 			},
@@ -201,7 +200,6 @@ func TestLoadConfig(t *testing.T) {
 			assert.Equal(t, tt.expected.URL, cfg.URL, "URL mismatch")
 			assert.Equal(t, tt.expected.Subject, cfg.Subject, "Subject mismatch")
 			assert.Equal(t, tt.expected.StreamName, cfg.StreamName, "StreamName mismatch")
-			assert.Equal(t, tt.expected.QueueName, cfg.QueueName, "QueueName mismatch")
 			assert.Equal(t, tt.expected.InactiveThreshold, cfg.InactiveThreshold, "InactiveThreshold mismatch")
 			assert.Equal(t, tt.expected.NatsPassword, cfg.NatsPassword, "NatsPassword mismatch")
 
@@ -471,6 +469,7 @@ func TestGetAllSubjectStringsWithAdditionalSuffixes(t *testing.T) {
 				"eventing.alert.*.*",
 				"eventing.var.*.*",
 				"eventing.replay.*.*",
+				"eventing.trigger.vars.*.*.*",
 			},
 		},
 		{
@@ -484,6 +483,8 @@ func TestGetAllSubjectStringsWithAdditionalSuffixes(t *testing.T) {
 				"eventing.var.dlq",
 				"eventing.replay.*.*",
 				"eventing.replay.dlq",
+				"eventing.trigger.vars.*.*.*",
+				"eventing.trigger.vars.dlq",
 			},
 		},
 		{
@@ -515,6 +516,14 @@ func TestGetAllSubjectStringsWithAdditionalSuffixes(t *testing.T) {
 				"ni.replay.ptang",
 				"ni.replay.zoo",
 				"ni.replay.boing",
+				"ni.trigger.vars.*.*.*",
+				"ni.trigger.vars.ekke",
+				"ni.trigger.vars.ekke",
+				"ni.trigger.vars.ekke",
+				"ni.trigger.vars.ekke",
+				"ni.trigger.vars.ptang",
+				"ni.trigger.vars.zoo",
+				"ni.trigger.vars.boing",
 			},
 		},
 	}
@@ -526,4 +535,258 @@ func TestGetAllSubjectStringsWithAdditionalSuffixes(t *testing.T) {
 			assert.Equal(t, tt.expected, actual, "Bad subject strings")
 		})
 	}
+}
+
+//nolint:gocritic
+func runJetStream(t *testing.T) *server.Server {
+	t.Helper()
+	tempDir := t.TempDir()
+	ns, err := server.NewServer(&server.Options{
+		JetStream: true,
+		StoreDir:  tempDir,
+		Port:      -1, // pick a random free port
+	})
+	if err != nil {
+		t.Fatalf("new server: %v", err)
+	}
+	go ns.Start()
+	if !ns.ReadyForConnections(5 * time.Second) {
+		t.Fatal("nats-server did not start")
+	}
+	url := ns.ClientURL()
+	t.Setenv("NATS_URL", url)
+
+	t.Cleanup(func() {
+		ns.Shutdown()
+		ns.WaitForShutdown()
+	})
+
+	return ns
+}
+
+func TestEnsureStream_CreatesNewStream(t *testing.T) {
+	srv := runJetStream(t)
+
+	nc, err := nats.Connect(srv.ClientURL())
+	require.NoError(t, err)
+	defer nc.Close()
+	js, err := jetstream.New(nc)
+	require.NoError(t, err)
+
+	logger, _ := zap.NewDevelopment()
+	cfg := Config{
+		StreamName: "TEST_STREAM",
+		Subject:    "test.subject",
+		Logger:     logger,
+	}
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+
+	// Pre-condition: ensure stream does not exist
+	_, err = js.Stream(ctx, cfg.StreamName)
+	require.Error(t, err)
+	require.ErrorIs(t, err, jetstream.ErrStreamNotFound)
+
+	// Act: call EnsureStream
+	err = EnsureStream(ctx, js, cfg)
+	require.NoError(t, err)
+
+	// Assert: stream now exists
+	stream, err := js.Stream(ctx, cfg.StreamName)
+	require.NoError(t, err, "stream should exist after EnsureStream")
+	require.NotNil(t, stream)
+
+	// Assert: stream configuration is correct
+	info, err := stream.Info(ctx)
+	require.NoError(t, err)
+
+	expectedSubjects, err := everySubjectConfig.getAllSubjectStringsWithAdditionalSuffixes(cfg.Subject, dlqSuffix)
+	require.NoError(t, err)
+	sort.Strings(expectedSubjects)
+	sort.Strings(info.Config.Subjects)
+
+	assert.Equal(t, cfg.StreamName, info.Config.Name)
+	assert.Equal(t, expectedSubjects, info.Config.Subjects)
+	assert.Equal(t, jetstream.FileStorage, info.Config.Storage)
+	assert.Equal(t, jetstream.WorkQueuePolicy, info.Config.Retention)
+	assert.Equal(t, defaultDuplicates, info.Config.Duplicates)
+}
+
+func TestEnsureStream_UpdateExistingStream(t *testing.T) {
+	srv := runJetStream(t)
+
+	nc, err := nats.Connect(srv.ClientURL())
+	require.NoError(t, err)
+	defer nc.Close()
+	js, err := jetstream.New(nc)
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+
+	logger, _ := zap.NewDevelopment()
+	cfg := Config{
+		StreamName: "TEST_UPDATE_STREAM",
+		Subject:    "eventing",
+		Logger:     logger,
+	}
+
+	// Pre-create a stream with a subset of subjects
+	initialSubjects := []string{"eventing.alert.*.*"}
+	_, err = js.CreateStream(ctx, jetstream.StreamConfig{
+		Name:     cfg.StreamName,
+		Subjects: initialSubjects,
+	})
+	require.NoError(t, err)
+
+	// Act: run EnsureStream, which should detect the existing stream and add subjects
+	err = EnsureStream(ctx, js, cfg)
+	require.NoError(t, err, "EnsureStream should succeed when updating")
+
+	// Assert: check that the stream was updated correctly
+	stream, err := js.Stream(ctx, cfg.StreamName)
+	require.NoError(t, err)
+	info, err := stream.Info(ctx)
+	require.NoError(t, err)
+
+	expectedSubjects, err := everySubjectConfig.getAllSubjectStringsWithAdditionalSuffixes(cfg.Subject, dlqSuffix)
+	require.NoError(t, err)
+
+	sort.Strings(info.Config.Subjects)
+	sort.Strings(expectedSubjects)
+
+	assert.Equal(t, expectedSubjects, info.Config.Subjects, "Stream subjects should be updated to the full desired set")
+}
+
+func TestEnsureStream_RefusesToDropSubjects(t *testing.T) {
+	srv := runJetStream(t)
+
+	nc, err := nats.Connect(srv.ClientURL())
+	require.NoError(t, err)
+	defer nc.Close()
+	js, err := jetstream.New(nc)
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+
+	logger, err := zap.NewDevelopment()
+	require.NoError(t, err)
+
+	cfg := Config{
+		StreamName: "TEST_STREAM_DROP",
+		Subject:    "eventing",
+		Logger:     logger,
+	}
+
+	// 1. Create a stream with an extra subject that EnsureStream will not generate
+	initialSubjects := []string{"eventing.some-old-subject"}
+	_, err = js.CreateStream(ctx, jetstream.StreamConfig{
+		Name:     cfg.StreamName,
+		Subjects: initialSubjects,
+	})
+	require.NoError(t, err)
+
+	// 2. Call EnsureStream, which will generate a different set of desired subjects
+	err = EnsureStream(ctx, js, cfg)
+
+	// 3. Assert that an error is returned because dropping a subject is not allowed
+	require.Error(t, err, "EnsureStream should return an error when trying to remove subjects")
+	assert.Contains(t, err.Error(), "desired subjects missing existing subject(s): eventing.some-old-subject")
+
+	// 4. Verify the stream's subjects have not been changed
+	stream, err := js.Stream(ctx, cfg.StreamName)
+	require.NoError(t, err)
+	info, err := stream.Info(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, initialSubjects, info.Config.Subjects, "Stream subjects should not have been modified")
+}
+
+func TestEnsureStream_NoUpdateWhenSubjectsMatch(t *testing.T) {
+	srv := runJetStream(t)
+
+	nc, err := nats.Connect(srv.ClientURL())
+	require.NoError(t, err)
+	defer nc.Close()
+	js, err := jetstream.New(nc)
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+
+	logger, err := zap.NewDevelopment()
+	require.NoError(t, err)
+
+	cfg := Config{
+		StreamName: "TEST_STREAM_NO_UPDATE",
+		Subject:    "test.subject",
+		Logger:     logger,
+	}
+
+	// Calculate the exact subjects that EnsureStream will expect
+	desiredSubjects, err := everySubjectConfig.getAllSubjectStringsWithAdditionalSuffixes(cfg.Subject, dlqSuffix)
+	require.NoError(t, err)
+
+	// Pre-create the stream with the exact desired subjects
+	_, err = js.CreateStream(ctx, jetstream.StreamConfig{
+		Name:     cfg.StreamName,
+		Subjects: desiredSubjects,
+	})
+	require.NoError(t, err)
+
+	// Act: Call EnsureStream on the already-correct stream
+	err = EnsureStream(ctx, js, cfg)
+
+	// Assert: No error should occur, and no update should have been attempted
+	require.NoError(t, err, "EnsureStream should not return an error when subjects match")
+
+	// Verify the stream's subjects are unchanged
+	stream, err := js.Stream(ctx, cfg.StreamName)
+	require.NoError(t, err)
+	info, err := stream.Info(ctx)
+	require.NoError(t, err)
+
+	sort.Strings(desiredSubjects)
+	sort.Strings(info.Config.Subjects)
+	assert.Equal(t, desiredSubjects, info.Config.Subjects, "Stream subjects should remain unchanged")
+}
+
+func TestEnsureElasticGroup_CreatesNewGroup(t *testing.T) {
+	srv := runJetStream(t)
+
+	nc, err := nats.Connect(srv.ClientURL())
+	require.NoError(t, err)
+	defer nc.Close()
+	js, err := jetstream.New(nc)
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithTimeout(t.Context(), 10000000*time.Second)
+	defer cancel()
+
+	// Create a stream for the consumer group to attach to
+	streamName := "test-stream"
+	_, err = js.CreateStream(ctx, jetstream.StreamConfig{
+		Name:     streamName,
+		Subjects: []string{"test.subject.*.*"},
+	})
+	require.NoError(t, err)
+
+	logger, _ := zap.NewDevelopment()
+	cfg := Config{Logger: logger}
+	groupName := "test-group"
+	pattern := "test.subject.*.*"
+	hashWildcards := []int{1, 2}
+
+	// Ensure the elastic group, which doesn't exist yet
+	err = ensureElasticGroup(ctx, js, streamName, groupName, pattern, hashWildcards, cfg)
+	require.NoError(t, err)
+
+	// Verify the group was created by checking for its config
+	ec, err := pcgroups.GetElasticConsumerGroupConfig(ctx, js, streamName, groupName)
+
+	require.NoError(t, err, "should not fail to get config for a created group")
+	require.NotNil(t, ec, "elastic consumer group config should not be nil")
+	assert.Equal(t, pattern, ec.Filter, "filter pattern mismatch")
+	assert.Equal(t, hashWildcards, ec.PartitioningWildcards, "hash wildcards mismatch")
+	assert.Equal(t, int(ec.MaxMembers), maxPCGroupMembers, "partitions should match maxPCGroupMembers")
 }

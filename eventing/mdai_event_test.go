@@ -41,7 +41,7 @@ func TestValidate(t *testing.T) {
 }
 
 func TestManualVariablesActionPayload_JSONMarshaling(t *testing.T) {
-	payload := ManualVariablesActionPayload{
+	payload := VariablesActionPayload{
 		VariableRef: "var1",
 		DataType:    "string",
 		Operation:   "set",
@@ -51,7 +51,7 @@ func TestManualVariablesActionPayload_JSONMarshaling(t *testing.T) {
 	jsonBytes, err := json.Marshal(payload)
 	require.NoError(t, err)
 
-	var decoded ManualVariablesActionPayload
+	var decoded VariablesActionPayload
 	err = json.Unmarshal(jsonBytes, &decoded)
 	require.NoError(t, err)
 	assert.Equal(t, payload, decoded)

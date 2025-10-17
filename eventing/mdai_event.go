@@ -44,13 +44,15 @@ func (consumerGroup MdaiEventConsumerGroup) String() string {
 }
 
 const (
-	AlertEventType  MdaiEventType = "alert"
-	VarEventType    MdaiEventType = "var"
-	ReplayEventType MdaiEventType = "replay"
+	AlertEventType   MdaiEventType = "alert"
+	VarEventType     MdaiEventType = "var"
+	ReplayEventType  MdaiEventType = "replay"
+	TriggerEventType MdaiEventType = "trigger.vars"
 
-	AlertConsumerGroupName  MdaiEventConsumerGroup = "alert-consumer-group"
-	VarsConsumerGroupName   MdaiEventConsumerGroup = "vars-consumer-group"
-	ReplayConsumerGroupName MdaiEventConsumerGroup = "replay-consumer-group"
+	AlertConsumerGroupName   MdaiEventConsumerGroup = "alert-consumer-group"
+	VarsConsumerGroupName    MdaiEventConsumerGroup = "vars-consumer-group"
+	ReplayConsumerGroupName  MdaiEventConsumerGroup = "replay-consumer-group"
+	TriggerConsumerGroupName MdaiEventConsumerGroup = "trigger-consumers"
 
 	ManualVariablesEventSource  = "manual_variables_api"
 	PrometheusAlertsEventSource = "prometheus"
@@ -62,19 +64,20 @@ type HandlerInvoker func(event MdaiEvent) error
 
 // MdaiEvent represents an event in the system.
 type MdaiEvent struct {
-	ID            string    `json:"id,omitempty"`
-	Name          string    `json:"name"`    // e.g. "alert_firing"
-	Version       int       `json:"version"` // schema version
-	Timestamp     time.Time `json:"timestamp,omitempty"`
-	Payload       string    `json:"payload"`
-	Source        string    `json:"source"`    // used in subject, could not be empty
-	SourceID      string    `json:"source_id"` // ex alert fingerprint
-	CorrelationID string    `json:"correlation_id,omitempty"`
-	HubName       string    `json:"hub_name"`
+	ID             string    `json:"id,omitempty"`
+	Name           string    `json:"name"`    // e.g. "alert_firing"
+	Version        int       `json:"version"` // schema version
+	Timestamp      time.Time `json:"timestamp,omitempty"`
+	Payload        string    `json:"payload"`
+	Source         string    `json:"source"`    // used in subject, could not be empty
+	SourceID       string    `json:"source_id"` // ex alert fingerprint
+	CorrelationID  string    `json:"correlation_id,omitempty"`
+	HubName        string    `json:"hub_name"`
+	RecursionDepth int       `json:"recursion_depth,omitempty"` // recursion depth limit for events
 }
 
 func NewMdaiEvent(hubName string, varName string, varType string, action string, payload any) (*MdaiEvent, error) {
-	payloadObj := ManualVariablesActionPayload{
+	payloadObj := VariablesActionPayload{
 		VariableRef: varName,
 		DataType:    varType,
 		Operation:   action,
@@ -109,6 +112,7 @@ func (mdaiEvent *MdaiEvent) MarshalLogObject(enc zapcore.ObjectEncoder) error {
 	enc.AddString("payload", mdaiEvent.Payload)
 	enc.AddTime("timestamp", mdaiEvent.Timestamp)
 	enc.AddString("correlation_id", mdaiEvent.CorrelationID)
+	enc.AddInt("recursion_depth", mdaiEvent.RecursionDepth)
 	return nil
 }
 
@@ -142,10 +146,10 @@ func (mdaiEvent *MdaiEvent) Validate() error {
 	return nil
 }
 
-// ManualVariablesActionPayload represents a payload for static variables actions.
+// VariablesActionPayload represents a payload for static variables actions.
 //
 //nolint:tagliatelle
-type ManualVariablesActionPayload struct {
+type VariablesActionPayload struct {
 	VariableRef string `json:"variableRef"`
 	DataType    string `json:"dataType"`
 	Operation   string `json:"operation"`
