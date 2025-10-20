@@ -31,6 +31,15 @@ var (
 	errNoHubNamLabel     = fmt.Errorf("ConfigMap does not have hub name label")
 )
 
+type ConfigMapStore interface {
+	Run() error
+	Stop()
+
+	GetAllHubsToDataMap() (map[string]map[string]string, error)
+	GetHubData(hubName string) ([]map[string]string, error)
+	GetConfigMapByHubName(hubName string) (*v1.ConfigMap, error)
+}
+
 type ConfigMapController struct {
 	InformerFactory informers.SharedInformerFactory
 	CmInformer      coreinformers.ConfigMapInformer
