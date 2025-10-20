@@ -111,9 +111,9 @@ func (f *FakeConfigMapStore) GetHubData(hubName string) ([]map[string]string, er
 		return nil, f.GetHubDataErr
 	}
 
-	cms := f.byHub[hubName]
-	res := make([]map[string]string, 0, len(cms))
-	for _, cm := range cms {
+	configMaps := f.byHub[hubName]
+	res := make([]map[string]string, 0, len(configMaps))
+	for _, cm := range configMaps {
 		res = append(res, cm.Data)
 	}
 	return res, nil
@@ -126,14 +126,18 @@ func (f *FakeConfigMapStore) GetConfigMapByHubName(hubName string) (*v1.ConfigMa
 		return nil, f.GetConfigMapByHubNameErr
 	}
 
-	cms := f.byHub[hubName]
-	switch len(cms) {
+	configMaps := f.byHub[hubName]
+	switch len(configMaps) {
 	case 0:
 		return nil, fmt.Errorf("no ConfigMap %s found for hub: %s", "?", hubName)
 	case 1:
-		return cms[0], nil
+		return configMaps[0], nil
 	default:
-		return nil, fmt.Errorf("multiple ConfigMaps %s found for the same hub: %s", "?", hubName)
+		names := make([]string, len(configMaps))
+		for i, cm := range configMaps {
+			names[i] = cm.Name
+		}
+		return nil, fmt.Errorf("multiple ConfigMaps %v found for the same hub: %s", names, hubName)
 	}
 }
 
