@@ -46,17 +46,14 @@ func (consumerGroup MdaiEventConsumerGroup) String() string {
 const (
 	AlertEventType   MdaiEventType = "alert"
 	VarEventType     MdaiEventType = "var"
-	ReplayEventType  MdaiEventType = "replay"
 	TriggerEventType MdaiEventType = "trigger.vars"
 
 	AlertConsumerGroupName   MdaiEventConsumerGroup = "alert-consumer-group"
 	VarsConsumerGroupName    MdaiEventConsumerGroup = "vars-consumer-group"
-	ReplayConsumerGroupName  MdaiEventConsumerGroup = "replay-consumer-group"
 	TriggerConsumerGroupName MdaiEventConsumerGroup = "trigger-consumers"
 
 	ManualVariablesEventSource  = "manual_variables_api"
 	PrometheusAlertsEventSource = "prometheus"
-	BufferReplaySource          = "buffer-replay"
 )
 
 // HandlerInvoker is a function type that processes MdaiEvents.

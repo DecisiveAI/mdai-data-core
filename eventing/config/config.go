@@ -109,11 +109,6 @@ var (
 		ConsumerGroup: eventing.VarsConsumerGroupName,
 		WildcardCount: 2,
 	}
-	replaySubjectConfig = mdaiSubjectConfig{
-		Topic:         eventing.ReplayEventType,
-		ConsumerGroup: eventing.ReplayConsumerGroupName,
-		WildcardCount: 2,
-	}
 	triggerSubjectConfig = mdaiSubjectConfig{
 		Topic:         eventing.TriggerEventType,
 		ConsumerGroup: eventing.TriggerConsumerGroupName,
@@ -127,7 +122,6 @@ var (
 	everySubjectConfig allSubjectConfigs = []mdaiSubjectConfig{
 		alertSubjectConfig,
 		varSubjectConfig,
-		replaySubjectConfig,
 		triggerSubjectConfig,
 	}
 )
