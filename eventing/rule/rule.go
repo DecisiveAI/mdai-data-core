@@ -117,8 +117,8 @@ const (
 	CmdVarMapAdd       CommandType = "variable.map.add"
 	CmdVarMapRemove    CommandType = "variable.map.remove"
 	CmdWebhookCall     CommandType = "webhook.call"
-	CmdReplayStart     CommandType = "replay.start"
-	CmdReplayEnd       CommandType = "replay.end"
+	CmdDeployReplay    CommandType = "replay.deploy"
+	CmdCleanUpReplay   CommandType = "replay.cleanup"
 )
 
 var AllCommandTypes = []CommandType{
@@ -128,8 +128,8 @@ var AllCommandTypes = []CommandType{
 	CmdVarMapAdd,
 	CmdVarMapRemove,
 	CmdWebhookCall,
-	CmdReplayStart,
-	CmdReplayEnd,
+	CmdDeployReplay,
+	CmdCleanUpReplay,
 }
 
 var validCommandTypes = map[CommandType]struct{}{
@@ -139,8 +139,8 @@ var validCommandTypes = map[CommandType]struct{}{
 	CmdVarMapAdd:       {},
 	CmdVarMapRemove:    {},
 	CmdWebhookCall:     {},
-	CmdReplayStart:     {},
-	CmdReplayEnd:       {},
+	CmdDeployReplay:    {},
+	CmdCleanUpReplay:   {},
 }
 
 func (t CommandType) String() string { return string(t) }

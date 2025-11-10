@@ -2,6 +2,7 @@ package kube
 
 import (
 	"fmt"
+	"k8s.io/client-go/dynamic"
 	"os"
 	"time"
 
@@ -134,6 +135,24 @@ func NewK8sClient(logger *zap.Logger) (kubernetes.Interface, error) {
 		}
 	}
 	return kubernetes.NewForConfig(config)
+}
+
+func NewK8sDynamicClient(logger *zap.Logger) (dynamic.Interface, error) {
+	config, err := rest.InClusterConfig()
+	if err != nil {
+		kubeconfig, err := os.UserHomeDir()
+		if err != nil {
+			logger.Error("Failed to load k8s config", zap.Error(err))
+			return nil, err
+		}
+
+		config, err = clientcmd.BuildConfigFromFlags("", kubeconfig+"/.kube/config")
+		if err != nil {
+			logger.Error("Failed to build k8s config", zap.Error(err))
+			return nil, err
+		}
+	}
+	return dynamic.NewForConfig(config)
 }
 
 func (cmc *ConfigMapController) GetAllHubsToDataMap() (map[string]map[string]string, error) {
