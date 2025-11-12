@@ -158,15 +158,6 @@ func getKubeConfig(logger *zap.Logger, homeDirGetterFunc HomeDirGetterFunc) (*re
 	return config, nil
 }
 
-func getKubeConfigFromFile(logger *zap.Logger, homeDir string) (*rest.Config, error) {
-	config, err := clientcmd.BuildConfigFromFlags("", homeDir+"/.kube/config")
-	if err != nil {
-		logger.Error("Failed to build k8s config", zap.Error(err))
-		return nil, err
-	}
-	return config, nil
-}
-
 func (cmc *ConfigMapController) GetAllHubsToDataMap() (map[string]map[string]string, error) {
 	hubMap := make(map[string]map[string]string)
 

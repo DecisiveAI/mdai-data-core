@@ -2,11 +2,12 @@ package kube
 
 import (
 	"errors"
-	"go.uber.org/zap/zaptest"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
+
+	"go.uber.org/zap/zaptest"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -14,6 +15,10 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/fake"
+)
+
+const (
+	dummyHomeDir = "will-be-replaced-by-setup"
 )
 
 func TestNewConfigMapController_SingleNs(t *testing.T) {
@@ -419,7 +424,7 @@ func TestGetKubeConfig(t *testing.T) {
 		{
 			name: "valid kubeconfig exists",
 			homeDirFunc: func() (string, error) {
-				return "will-be-replaced-by-setup", nil
+				return dummyHomeDir, nil
 			},
 			setupKubeconfig: func(t *testing.T) string {
 				tmpDir := t.TempDir()
@@ -469,7 +474,7 @@ users:
 		{
 			name: "kubeconfig file does not exist",
 			homeDirFunc: func() (string, error) {
-				return "will-be-replaced-by-setup", nil
+				return dummyHomeDir, nil
 			},
 			setupKubeconfig: func(t *testing.T) string {
 				// Return a temp dir without creating .kube/config
@@ -480,7 +485,7 @@ users:
 		{
 			name: "invalid kubeconfig yaml",
 			homeDirFunc: func() (string, error) {
-				return "will-be-replaced-by-setup", nil
+				return dummyHomeDir, nil
 			},
 			setupKubeconfig: func(t *testing.T) string {
 				tmpDir := t.TempDir()
@@ -501,7 +506,7 @@ users:
 		{
 			name: "empty kubeconfig file",
 			homeDirFunc: func() (string, error) {
-				return "will-be-replaced-by-setup", nil
+				return dummyHomeDir, nil
 			},
 			setupKubeconfig: func(t *testing.T) string {
 				tmpDir := t.TempDir()
@@ -521,7 +526,7 @@ users:
 		{
 			name: "kubeconfig without current-context",
 			homeDirFunc: func() (string, error) {
-				return "will-be-replaced-by-setup", nil
+				return dummyHomeDir, nil
 			},
 			setupKubeconfig: func(t *testing.T) string {
 				tmpDir := t.TempDir()
@@ -563,7 +568,7 @@ clusters:
 					if err != nil {
 						return "", err
 					}
-					if homeDir == "will-be-replaced-by-setup" {
+					if homeDir == dummyHomeDir {
 						return tmpDir, nil
 					}
 					return homeDir, nil
@@ -580,10 +585,6 @@ clusters:
 				}
 				if config != nil {
 					t.Errorf("expected nil config but got: %v", config)
-				}
-				if tt.errorContains != "" && err != nil {
-					// Note: error checking is optional since we're not checking specific error messages
-					// but this shows how you could if needed
 				}
 			} else {
 				if err != nil {
