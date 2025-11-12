@@ -2,9 +2,10 @@ package kube
 
 import (
 	"fmt"
-	"k8s.io/client-go/dynamic"
 	"os"
 	"time"
+
+	"k8s.io/client-go/dynamic"
 
 	"go.uber.org/zap"
 	v1 "k8s.io/api/core/v1"
