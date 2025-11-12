@@ -5,6 +5,8 @@ import (
 	"os"
 	"time"
 
+	"k8s.io/client-go/dynamic"
+
 	"go.uber.org/zap"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -119,21 +121,41 @@ func getHubName(configMap *v1.ConfigMap) (string, error) {
 }
 
 func NewK8sClient(logger *zap.Logger) (kubernetes.Interface, error) {
-	config, err := rest.InClusterConfig()
+	config, err := getKubeConfig(logger, os.UserHomeDir)
 	if err != nil {
-		kubeconfig, err := os.UserHomeDir()
-		if err != nil {
-			logger.Error("Failed to load k8s config", zap.Error(err))
-			return nil, err
-		}
-
-		config, err = clientcmd.BuildConfigFromFlags("", kubeconfig+"/.kube/config")
-		if err != nil {
-			logger.Error("Failed to build k8s config", zap.Error(err))
-			return nil, err
-		}
+		return nil, err
 	}
 	return kubernetes.NewForConfig(config)
+}
+
+func NewK8sDynamicClient(logger *zap.Logger) (dynamic.Interface, error) {
+	config, err := getKubeConfig(logger, os.UserHomeDir)
+	if err != nil {
+		return nil, err
+	}
+	return dynamic.NewForConfig(config)
+}
+
+type HomeDirGetterFunc func() (string, error)
+
+func getKubeConfig(logger *zap.Logger, homeDirGetterFunc HomeDirGetterFunc) (*rest.Config, error) {
+	config, inClusterErr := rest.InClusterConfig()
+	if inClusterErr != nil {
+		// Try fetching config from the default file location
+		homeDir, homeDirErr := homeDirGetterFunc()
+		if homeDirErr != nil {
+			logger.Error("Failed to load home directory for loading k8s config", zap.Error(homeDirErr))
+			return nil, homeDirErr
+		}
+
+		fileConfig, kubeConfigFromFileErr := clientcmd.BuildConfigFromFlags("", homeDir+"/.kube/config")
+		if kubeConfigFromFileErr != nil {
+			logger.Error("Failed to build k8s config", zap.Error(kubeConfigFromFileErr))
+			return nil, kubeConfigFromFileErr
+		}
+		config = fileConfig
+	}
+	return config, nil
 }
 
 func (cmc *ConfigMapController) GetAllHubsToDataMap() (map[string]map[string]string, error) {
