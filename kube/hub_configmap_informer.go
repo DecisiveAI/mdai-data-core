@@ -113,20 +113,7 @@ func NewHubConfigMapController(configMapTypes []string, namespace string, client
 	cmInformer := informerFactory.Core().V1().ConfigMaps()
 	if err := cmInformer.Informer().AddIndexers(map[string]cache.IndexFunc{
 		ByHubAndType: func(obj interface{}) ([]string, error) {
-			cm := obj.(*v1.ConfigMap)
-			hubName, err := getHubName(cm)
-			if err != nil {
-				logger.Error("failed to get hub name for ConfigMap", zap.String("ConfigMap name", cm.Name))
-				return nil, err
-			}
-
-			configMapType, err := getConfigMapType(cm)
-			if err != nil {
-				logger.Error("failed to get ConfigMap type", zap.String("ConfigMap name", cm.Name))
-				return nil, err
-			}
-
-			return []string{getHubAndTypeKey(hubName, configMapType)}, nil
+			return byHubAndTypeIndex(logger, obj)
 		},
 		ByType: func(obj interface{}) ([]string, error) {
 			cm := obj.(*v1.ConfigMap)
@@ -178,6 +165,27 @@ func getConfigMapType(configMap *v1.ConfigMap) (string, error) {
 func getHubAndTypeKey(hubName string, configMapType string) string {
 	// NUL cannot appear in Kubernetes label values
 	return hubName + "\x00" + configMapType
+}
+
+// byHubAndTypeIndex must never return an error: client-go panics the informer on
+// any IndexFunc error, and ConfigMaps missing the hub-name label legitimately
+// reach here (the watch filter requires only the type label).
+func byHubAndTypeIndex(logger *zap.Logger, obj interface{}) ([]string, error) {
+	cm, ok := obj.(*v1.ConfigMap)
+	if !ok {
+		return nil, nil
+	}
+	hubName, err := getHubName(cm)
+	if err != nil {
+		logger.Warn("skipping ConfigMap without hub name label from hub/type index", zap.String("ConfigMap name", cm.Name))
+		return nil, nil
+	}
+	configMapType, err := getConfigMapType(cm)
+	if err != nil {
+		logger.Warn("skipping ConfigMap without type label from hub/type index", zap.String("ConfigMap name", cm.Name))
+		return nil, nil
+	}
+	return []string{getHubAndTypeKey(hubName, configMapType)}, nil
 }
 
 func NewK8sClient(logger *zap.Logger) (kubernetes.Interface, error) {

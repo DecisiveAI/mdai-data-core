@@ -277,6 +277,37 @@ func TestGetHubName(t *testing.T) {
 	})
 }
 
+func TestByHubAndTypeIndex(t *testing.T) {
+	t.Parallel()
+
+	t.Run("missing hub name label indexes under no key without error", func(t *testing.T) {
+		t.Parallel()
+
+		cm := &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:   "orphan-variables",
+				Labels: map[string]string{ConfigMapTypeLabel: EnvConfigMapType},
+			},
+		}
+
+		keys, err := byHubAndTypeIndex(zap.NewNop(), cm)
+
+		require.NoError(t, err)
+		require.Empty(t, keys)
+	})
+
+	t.Run("labeled configmap indexes under hub and type key", func(t *testing.T) {
+		t.Parallel()
+
+		cm := newTestConfigMap("mdaihub-first-variables", "first", "mdaihub-first", EnvConfigMapType, nil)
+
+		keys, err := byHubAndTypeIndex(zap.NewNop(), cm)
+
+		require.NoError(t, err)
+		require.Equal(t, []string{getHubAndTypeKey("mdaihub-first", EnvConfigMapType)}, keys)
+	})
+}
+
 func TestGetConfigMapType(t *testing.T) {
 	t.Parallel()
 
